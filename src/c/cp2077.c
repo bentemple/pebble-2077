@@ -2,6 +2,7 @@
 #include <ctype.h>
 
 #define SETTINGS_KEY 1
+#define WAKE_CALC_COUNT_KEY 2
 
 const int MARGIN_SIZE = 4;
 const int TEXT_HEIGHT = 14;
@@ -29,8 +30,27 @@ static GBitmap *s_charge_bitmap;
 static GColor color_fg;
 static GColor color_bg;
 
-static int s_battery_level;
-static Layer *s_battery_layer;
+static int s_sleep_percent;
+static Layer *s_progress_layer;
+
+// Wake time tracking
+static time_t s_wake_time = 0;
+static bool s_was_sleeping = false;
+static int s_wake_calc_count = -1;  // -1 = not loaded yet
+
+// Cached state for change detection (reduces unnecessary redraws)
+static int s_last_sleep_percent = -1;
+static int s_last_day = -1;
+static int s_last_minute = -1;
+static int s_last_step_count = -1;
+static int s_last_temperature = -999;
+static bool s_last_steps_visible = false;
+
+// Cached formatted strings (avoid reformatting when unchanged)
+static char s_time_buffer[8];
+static char s_date_buffer[8];
+static char s_day_buffer[32];
+static char s_uptime_buffer[16];
 
 typedef struct ClaySettings {
   bool show_steps, show_weather, weather_use_metric, hour_vibe, disconnect_alert;
@@ -52,24 +72,119 @@ static void update_time() {
   time_t temp = time(NULL);
   struct tm *tick_time = localtime(&temp);
 
-  static char s_time_buffer[8];
-  strftime(s_time_buffer, sizeof(s_time_buffer), clock_is_24h_style() ? "%H:%M" : "%I:%M", tick_time);
+  int current_minute = tick_time->tm_min;
+  int current_hour = tick_time->tm_hour;
+  int current_day = tick_time->tm_mday;
 
-  static char s_date_buffer[8];
-  strftime(s_date_buffer, sizeof(s_date_buffer), "%d", tick_time);
+  // Only update time string when minute changes
+  if (current_minute != s_last_minute) {
+    s_last_minute = current_minute;
+    strftime(s_time_buffer, sizeof(s_time_buffer), clock_is_24h_style() ? "%H:%M" : "%I:%M", tick_time);
+    text_layer_set_text(s_time_layer, s_time_buffer);
 
-  static char s_day_buffer[32];
-  strftime(s_day_buffer, sizeof(s_day_buffer), "%A", tick_time);
-  str_to_upper(s_day_buffer);
+    // Update uptime display
+    if (s_wake_time > 0) {
+      int uptime_secs = time(NULL) - s_wake_time;
+      int uptime_hrs = uptime_secs / 3600;
+      int uptime_mins = (uptime_secs % 3600) / 60;
+      int count = s_wake_calc_count >= 0 ? s_wake_calc_count : 0;
+      snprintf(s_uptime_buffer, sizeof(s_uptime_buffer), "UPTIME_%02d:%02d_%d",
+               uptime_hrs, uptime_mins, count);
+    } else {
+      int count = s_wake_calc_count >= 0 ? s_wake_calc_count : 0;
+      snprintf(s_uptime_buffer, sizeof(s_uptime_buffer), "UPTIME_--:--_%d", count);
+    }
+    text_layer_set_text(s_custom_layer, s_uptime_buffer);
+  }
 
-  static char s_os_buffer[32];
-  strftime(s_os_buffer, sizeof(s_os_buffer), settings.custom_text, tick_time);
-  str_to_upper(s_os_buffer);
+  // Only update date strings when day changes (once per day vs 1440 times)
+  if (current_day != s_last_day) {
+    s_last_day = current_day;
+    strftime(s_date_buffer, sizeof(s_date_buffer), "%d", tick_time);
+    strftime(s_day_buffer, sizeof(s_day_buffer), "%Y.%m.%d", tick_time);
+    text_layer_set_text(s_date_layer, s_date_buffer);
+    text_layer_set_text(s_day_layer, s_day_buffer);
+  }
 
-  text_layer_set_text(s_time_layer, s_time_buffer);
-  text_layer_set_text(s_date_layer, s_date_buffer);
-  text_layer_set_text(s_day_layer, s_day_buffer);
-  text_layer_set_text(s_custom_layer, s_os_buffer);
+}
+
+static void init_wake_time() {
+  #if defined(PBL_HEALTH)
+  time_t now = time(NULL);
+
+  // Load calc counter from persistence once
+  if (s_wake_calc_count < 0) {
+    s_wake_calc_count = persist_exists(WAKE_CALC_COUNT_KEY)
+      ? persist_read_int(WAKE_CALC_COUNT_KEY)
+      : 0;
+  }
+
+  // Init current sleep state
+  HealthActivityMask activities = health_service_peek_current_activities();
+  s_was_sleeping = activities & HealthActivitySleep;
+
+  // Check if cached wake time is still valid (<12 hours old)
+  if (s_wake_time > 0 && s_wake_time <= now && (now - s_wake_time) < 12 * 3600) {
+    return;  // Valid in-memory cache
+  }
+
+  // No valid cache - estimate from health data if awake
+  if (!s_was_sleeping) {
+    // Increment and persist calc counter
+    s_wake_calc_count++;
+    persist_write_int(WAKE_CALC_COUNT_KEY, s_wake_calc_count);
+
+    time_t today_start = time_start_of_today();
+    HealthMetric metric = HealthMetricSleepSeconds;
+    HealthServiceAccessibilityMask mask = health_service_metric_accessible(
+      metric, today_start, now
+    );
+
+    if (mask & HealthServiceAccessibilityMaskAvailable) {
+      int sleep_seconds = (int)health_service_sum_today(metric);
+      if (sleep_seconds > 0) {
+        // Estimate: woke up after sleeping this many seconds since midnight
+        s_wake_time = today_start + sleep_seconds;
+      } else {
+        // No sleep recorded - use app start time
+        s_wake_time = now;
+      }
+    } else {
+      // Health not available - use app start time
+      s_wake_time = now;
+    }
+  }
+  // If currently sleeping, s_wake_time stays 0 until we wake up
+  #endif
+}
+
+static void update_sleep() {
+  #if defined(PBL_HEALTH)
+  HealthMetric metric = HealthMetricSleepSeconds;
+  time_t start = time_start_of_today();
+  time_t end = time(NULL);
+
+  HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
+  int sleep_seconds = 0;
+
+  if (mask & HealthServiceAccessibilityMaskAvailable) {
+    sleep_seconds = (int)health_service_sum_today(metric);
+  }
+
+  // 7 hours = 25200 seconds = 100%
+  int sleep_percent = (sleep_seconds * 100) / 25200;
+  if (sleep_percent > 100) {
+    sleep_percent = 100;
+  }
+
+  if (sleep_percent != s_last_sleep_percent) {
+    s_last_sleep_percent = sleep_percent;
+    s_sleep_percent = sleep_percent;
+    if (s_progress_layer) {
+      layer_mark_dirty(s_progress_layer);
+    }
+  }
+  #endif
 }
 
 static void update_steps() {
@@ -88,9 +203,14 @@ static void update_steps() {
     else {
       step_count = 0;
     }
-    static char s_step_buffer[16];
-    snprintf(s_step_buffer, sizeof(s_step_buffer), "STEPS: %d", step_count);
-    text_layer_set_text(s_step_layer, s_step_buffer);
+
+    // Only update text layer if step count changed
+    if (step_count != s_last_step_count) {
+      s_last_step_count = step_count;
+      static char s_step_buffer[16];
+      snprintf(s_step_buffer, sizeof(s_step_buffer), "STEPS: %d", step_count);
+      text_layer_set_text(s_step_layer, s_step_buffer);
+    }
     layer_set_hidden(text_layer_get_layer(s_step_layer), false);
   }
   else {
@@ -100,41 +220,51 @@ static void update_steps() {
 }
 
 static void update_weather_layers() {
-  if (settings.show_weather && settings.temperature && settings.temperature) {
+  if (settings.show_weather && settings.temperature) {
     static char temperature_buffer[8];
     static char conditions_buffer[32];
 
-    if (settings.weather_use_metric) {
-      snprintf(temperature_buffer, sizeof(temperature_buffer), "%dC", settings.temperature);
-    }
-    else {
-      int temp_f = settings.temperature * 1.8 + 32;
-      snprintf(temperature_buffer, sizeof(temperature_buffer), "%dF", temp_f);
-    }
-    snprintf(conditions_buffer, sizeof(conditions_buffer), "%s", settings.condition);
+    // Only reformat strings if temperature changed
+    if (settings.temperature != s_last_temperature) {
+      s_last_temperature = settings.temperature;
 
-    text_layer_set_text(s_condition_layer, conditions_buffer);
-    text_layer_set_text(s_temperature_layer, temperature_buffer);
+      if (settings.weather_use_metric) {
+        snprintf(temperature_buffer, sizeof(temperature_buffer), "%dC", settings.temperature);
+      }
+      else {
+        int temp_f = settings.temperature * 1.8 + 32;
+        snprintf(temperature_buffer, sizeof(temperature_buffer), "%dF", temp_f);
+      }
+      snprintf(conditions_buffer, sizeof(conditions_buffer), "%s", settings.condition);
 
-    // update position based on step visibility/availability
-    GRect step_frame = layer_get_frame(text_layer_get_layer(s_step_layer));
-    int x = step_frame.origin.x;
-    if (!layer_get_hidden(text_layer_get_layer(s_step_layer))) {
-      int condition_y = step_frame.origin.y - TEXT_HEIGHT;
-      int temperature_y = condition_y - TEXT_HEIGHT;
-      layer_set_frame(text_layer_get_layer(s_condition_layer),
-        GRect(x, condition_y, 136, TEXT_HEIGHT)
-      );
-      layer_set_frame(text_layer_get_layer(s_temperature_layer),
-        GRect(x, temperature_y, 136, TEXT_HEIGHT)
-      );
+      text_layer_set_text(s_condition_layer, conditions_buffer);
+      text_layer_set_text(s_temperature_layer, temperature_buffer);
     }
-    else {
-      int temperature_y = step_frame.origin.y - TEXT_HEIGHT;
-      layer_set_frame(text_layer_get_layer(s_condition_layer), step_frame);
-      layer_set_frame(text_layer_get_layer(s_temperature_layer),
-        GRect(x, temperature_y, 136, TEXT_HEIGHT)
-      );
+
+    // Only recalculate positions if step visibility changed
+    bool steps_visible = !layer_get_hidden(text_layer_get_layer(s_step_layer));
+    if (steps_visible != s_last_steps_visible) {
+      s_last_steps_visible = steps_visible;
+
+      GRect step_frame = layer_get_frame(text_layer_get_layer(s_step_layer));
+      int x = step_frame.origin.x;
+      if (steps_visible) {
+        int condition_y = step_frame.origin.y - TEXT_HEIGHT;
+        int temperature_y = condition_y - TEXT_HEIGHT;
+        layer_set_frame(text_layer_get_layer(s_condition_layer),
+          GRect(x, condition_y, 136, TEXT_HEIGHT)
+        );
+        layer_set_frame(text_layer_get_layer(s_temperature_layer),
+          GRect(x, temperature_y, 136, TEXT_HEIGHT)
+        );
+      }
+      else {
+        int temperature_y = step_frame.origin.y - TEXT_HEIGHT;
+        layer_set_frame(text_layer_get_layer(s_condition_layer), step_frame);
+        layer_set_frame(text_layer_get_layer(s_temperature_layer),
+          GRect(x, temperature_y, 136, TEXT_HEIGHT)
+        );
+      }
     }
 
     layer_set_hidden(text_layer_get_layer(s_condition_layer), false);
@@ -146,15 +276,15 @@ static void update_weather_layers() {
   }
 }
 
-static void battery_update_proc(Layer *layer, GContext *ctx) {
+static void progress_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  int width = (s_battery_level * bounds.size.w) / 100;
+  int width = (s_sleep_percent * bounds.size.w) / 100;
 
   // draw the background
   graphics_context_set_fill_color(ctx, color_bg);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
-  // draw the bar
+  // draw the bar (sleep progress - 7 hours = 100%)
   graphics_context_set_fill_color(ctx, color_fg);
   graphics_fill_rect(ctx, GRect(0, 0, width, bounds.size.h), 0, GCornerNone);
 }
@@ -165,9 +295,9 @@ static void load_fonts() {
   s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_12));
 }
 
-static void load_battery_layer(int x, int y) {
-  s_battery_layer = layer_create(GRect(x+43, y+13, 96, 8));
-  layer_set_update_proc(s_battery_layer, battery_update_proc);
+static void load_progress_layer(int x, int y) {
+  s_progress_layer = layer_create(GRect(x+43, y+13, 96, 8));
+  layer_set_update_proc(s_progress_layer, progress_update_proc);
 }
 
 static void load_hud_layer(int x, int y) {
@@ -231,7 +361,7 @@ static void load_info_layer(TextLayer **layer, int y) {
 }
 
 static void load_hud(int x, int y) {
-  load_battery_layer(x, y);
+  load_progress_layer(x, y);
   load_hud_layer(x, y);
   load_charge_layer(x, y);
   load_date_layer(x, y);
@@ -279,7 +409,7 @@ static void main_window_load(Window *window) {
   load_info_layer(&s_temperature_layer, temperature_y);
 
   // add children
-  layer_add_child(window_layer, s_battery_layer);
+  layer_add_child(window_layer, s_progress_layer);
   layer_add_child(window_layer, bitmap_layer_get_layer(s_hud_layer));
   layer_add_child(window_layer, bitmap_layer_get_layer(s_charge_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_date_layer));
@@ -308,14 +438,22 @@ static void main_window_unload(Window *window) {
   fonts_unload_custom_font(s_time_font);
   fonts_unload_custom_font(s_date_font);
   fonts_unload_custom_font(s_text_font);
-  layer_destroy(s_battery_layer);
+  layer_destroy(s_progress_layer);
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   update_time();
 
-  // request new weather data
-  if (tick_time->tm_min % 30 == 0 && settings.show_weather) {
+  // refresh steps every 30 minutes
+  if (tick_time->tm_min % 30 == 0) {
+    update_steps();
+  }
+
+  // refresh sleep and weather every hour
+  if (tick_time->tm_min == 0) {
+    update_sleep();
+  }
+  if (tick_time->tm_min == 0 && settings.show_weather) {
     DictionaryIterator *it;
     app_message_outbox_begin(&it);
     dict_write_uint8(it, 0, 0);
@@ -328,8 +466,7 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 static void battery_callback(BatteryChargeState state) {
-  s_battery_level = state.charge_percent;
-  layer_mark_dirty(s_battery_layer);
+  // Show/hide charging indicator
   layer_set_hidden(bitmap_layer_get_layer(s_charge_layer), !state.is_plugged);
 }
 
@@ -345,7 +482,21 @@ static void bt_callback(bool connected) {
 
 #if defined(PBL_HEALTH)
 static void health_handler(HealthEventType event, void *context) {
-  if (event == HealthEventSignificantUpdate || event == HealthEventMovementUpdate) {
+  if (event == HealthEventSignificantUpdate) {
+    // Check for sleep → awake transition
+    HealthActivityMask activities = health_service_peek_current_activities();
+    bool is_sleeping = activities & HealthActivitySleep;
+
+    if (s_was_sleeping && !is_sleeping) {
+      // Just woke up - record wake time
+      s_wake_time = time(NULL);
+    }
+    s_was_sleeping = is_sleeping;
+
+    update_steps();
+    update_sleep();
+  }
+  if (event == HealthEventMovementUpdate) {
     update_steps();
   }
 }
@@ -365,7 +516,7 @@ static void update_health_subscription() {
 static void default_settings() {
   settings.show_steps = true;
   settings.show_weather = true;
-  settings.weather_use_metric = true;
+  settings.weather_use_metric = false;
   settings.hour_vibe = false;
   settings.disconnect_alert = true;
   settings.temperature = (int)NULL;
@@ -380,8 +531,17 @@ static void load_settings() {
 
 static void save_settings() {
   persist_write_data(SETTINGS_KEY, &settings, sizeof(settings));
+
+  // Invalidate caches to force refresh after settings change
+  s_last_minute = -1;
+  s_last_day = -1;
+  s_last_sleep_percent = -1;
+  s_last_step_count = -1;
+  s_last_temperature = -999;
+
   update_time();
   update_steps();
+  update_sleep();
   update_weather_layers();
   update_health_subscription();
 }
@@ -399,10 +559,11 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
     settings.show_steps = show_steps_t->value->int32 == 1;
   }
 
-  Tuple *show_weather_t = dict_find(it, MESSAGE_KEY_PREF_SHOW_WEATHER);
-  if (show_weather_t) {
-    settings.show_weather = show_weather_t->value->int32 == 1;
-  }
+  // Force weather always on - ignore config
+  // Tuple *show_weather_t = dict_find(it, MESSAGE_KEY_PREF_SHOW_WEATHER);
+  // if (show_weather_t) {
+  //   settings.show_weather = show_weather_t->value->int32 == 1;
+  // }
 
   Tuple *weather_use_metric_t = dict_find(it, MESSAGE_KEY_PREF_WEATHER_METRIC);
   if (weather_use_metric_t) {
@@ -429,6 +590,7 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
 
 static void init() {
   load_settings();
+  init_wake_time();
 
   // register for time updates
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
@@ -460,6 +622,7 @@ static void init() {
 
   update_time();
   update_steps();
+  update_sleep();
   update_weather_layers();
   battery_callback(battery_state_service_peek());
   bt_callback(connection_service_peek_pebble_app_connection());

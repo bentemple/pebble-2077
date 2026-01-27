@@ -28,7 +28,7 @@ const config = [
             },
             {
                 "type": "text",
-                "defaultValue": "Weather data is sourced from Open-Meteo. Location is determined automatically using your device location."
+                "defaultValue": "Weather data is sourced from Open-Meteo."
             },
             {
                 "type": "toggle",

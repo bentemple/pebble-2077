@@ -60,15 +60,15 @@ const xhrRequest = function (url, type, callback) {
     xhr.send();
 };
 
-function locationSuccess(pos) {
-    console.log('Got location')
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&current=temperature_2m,weather_code`
+function fetchWeather() {
+    // Hardcoded location - Gadgetbridge intercepts and uses its own weather data
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current_weather=true'
 
     xhrRequest(url, 'GET',
         (res) => {
             const data = JSON.parse(res)
-            const temp = Math.round(data.current.temperature_2m)
-            const weather_code = parseInt(data.current.weather_code)
+            const temp = Math.round(data.current_weather.temperature)
+            const weather_code = parseInt(data.current_weather.weathercode)
             const conditions = getWeatherDescription(weather_code)
 
             const dictionary = {
@@ -87,17 +87,8 @@ function locationSuccess(pos) {
     )
 }
 
-function locationError(err) {
-    console.log('Error requesting location')
-}
-
 function getWeather() {
-    console.log('Getting location for weather')
-    navigator.geolocation.getCurrentPosition(
-        locationSuccess,
-        locationError,
-        {timeout: 15000, maximumAge: 60000}
-    );
+    fetchWeather()
 }
 
 Pebble.addEventListener('ready',
@@ -111,3 +102,4 @@ Pebble.addEventListener('appmessage',
         getWeather()
     }
 )
+
