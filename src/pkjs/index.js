@@ -1,6 +1,25 @@
 const Clay = require('pebble-clay')
 const clayConfig = require('./config')
 
+// Cached settings from Clay
+let settings = {
+    skipLocation: true  // Default
+}
+
+function loadSettings() {
+    try {
+        const stored = localStorage.getItem('clay-settings')
+        if (stored) {
+            const parsed = JSON.parse(stored)
+            settings.skipLocation = parsed.PREF_SKIP_LOCATION !== undefined
+                ? parsed.PREF_SKIP_LOCATION
+                : true
+        }
+    } catch (e) {
+        console.log('Error loading settings: ' + e.message)
+    }
+}
+
 function customClay() {
     this.on(this.EVENTS.AFTER_BUILD, function() {
         const topTextSelect = this.getItemById('top-text-select')
@@ -8,6 +27,13 @@ function customClay() {
 
         topTextSelect.on('change', function() {
             topTextInput.set(topTextSelect.get())
+        })
+
+        const bottomTextSelect = this.getItemById('bottom-text-select')
+        const bottomTextInput = this.getItemById('bottom-text-input')
+
+        bottomTextSelect.on('change', function() {
+            bottomTextInput.set(bottomTextSelect.get())
         })
     }.bind(this))
 }
@@ -60,9 +86,8 @@ const xhrRequest = function (url, type, callback) {
     xhr.send();
 };
 
-function fetchWeather() {
-    // Hardcoded location - Gadgetbridge intercepts and uses its own weather data
-    const url = 'https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current_weather=true'
+function fetchWeatherWithCoords(lat, lon) {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`
 
     xhrRequest(url, 'GET',
         (res) => {
@@ -88,17 +113,35 @@ function fetchWeather() {
 }
 
 function getWeather() {
-    fetchWeather()
+    if (settings.skipLocation) {
+        // Use 0,0 - Gadgetbridge or similar will intercept
+        fetchWeatherWithCoords(0, 0)
+    } else {
+        // Try to get real location
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                fetchWeatherWithCoords(pos.coords.latitude, pos.coords.longitude)
+            },
+            (err) => {
+                console.log('Geolocation failed: ' + err.message)
+                // Don't fetch weather if location fails
+            },
+            { timeout: 15000, maximumAge: 60000 }
+        )
+    }
 }
 
 Pebble.addEventListener('ready',
     () => {
+        loadSettings()
         getWeather()
     }
 )
 
 Pebble.addEventListener('appmessage',
-    () => {
+    (e) => {
+        console.log('appmessage received: ' + JSON.stringify(e.payload))
+        loadSettings()
         getWeather()
     }
 )

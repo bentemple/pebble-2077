@@ -23,7 +23,8 @@
     "targetPlatforms": [
       "aplite",
       "basalt",
-      "diorite"
+      "diorite",
+      "emery"
     ],
     "watchapp": {
       "watchface": true
@@ -34,7 +35,12 @@
       "PREF_SHOW_STEPS",
       "PREF_SHOW_WEATHER",
       "PREF_WEATHER_METRIC",
+      "PREF_SKIP_LOCATION",
       "PREF_CUSTOM_TEXT",
+      "PREF_BOTTOM_TEXT",
+      "PREF_PROGRESS_MODE",
+      "PREF_STEP_GOAL",
+      "PREF_SLEEP_GOAL",
       "PREF_HOUR_VIBE",
       "PREF_DISCONNECT_ALERT"
     ],
@@ -55,7 +61,15 @@
           "type": "font",
           "name": "FONT_RAJDHANI_58",
           "file": "fonts/Rajdhani-Regular.ttf",
-          "characterRegex": "[0-9:]"
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": ["aplite", "basalt", "diorite"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_RAJDHANI_76",
+          "file": "fonts/Rajdhani-Regular.ttf",
+          "characterRegex": "[0-9:]",
+          "targetPlatforms": ["emery"]
         },
         {
           "type": "font",
@@ -72,7 +86,14 @@
         {
           "type": "bitmap",
           "name": "IMAGE_HUD",
-          "file": "images/hud.png"
+          "file": "images/hud.png",
+          "targetPlatforms": ["aplite", "basalt", "diorite"]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_HUD",
+          "file": "images/hud_emery.png",
+          "targetPlatforms": ["emery"]
         },
         {
           "type": "bitmap",
