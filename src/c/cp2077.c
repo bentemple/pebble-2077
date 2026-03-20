@@ -46,8 +46,28 @@
   #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT + 3)
   #define DAY_LAYER_WIDTH (HUD_WIDTH - DAY_LAYER_OFFSET_X)
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
-  #define TEMP_SLASH_OFFSET 40   // X offset for "/" in split temp display
-  #define TEMP_HIGH_OFFSET 50    // X offset for high temp in split temp display
+
+  // Orbitron-SemiBold 17pt character widths (measure if font changes)
+  #define INFO_CHAR_WIDTH_F 10
+  #define INFO_CHAR_WIDTH_C 11
+  #define INFO_CHAR_WIDTH_SLASH 7
+  #define INFO_CHAR_WIDTH_MINUS 8
+  #define INFO_KERNING 1
+  // Initial offsets for temperature layers (repositioned dynamically)
+  #define TEMP_SLASH_OFFSET 40
+  #define TEMP_HIGH_OFFSET 50
+  static const int s_info_digit_widths[10] = {
+    12,  // 0
+    8,   // 1
+    11,  // 2
+    11,  // 3
+    12,  // 4
+    11,  // 5
+    11,  // 6
+    11,  // 7
+    11,  // 8
+    11   // 9
+  };
 
   // ============================================================
   // DYNAMIC COLOR CONFIGURATION (easy to tweak)
@@ -682,6 +702,35 @@ static GColor get_temperature_color(int temp_f) {
   return (GColor){ .argb = s_temp_lut[temp_f] };
 }
 
+// Calculate width of temperature string (e.g., "72F" or "-5C")
+static int get_temp_text_width(int temp, bool metric) {
+  int width = 0;
+  int abs_temp = temp < 0 ? -temp : temp;
+
+  // Negative sign
+  if (temp < 0) {
+    width += INFO_CHAR_WIDTH_MINUS + INFO_KERNING;
+  }
+
+  // Digits
+  if (abs_temp >= 100) {
+    width += s_info_digit_widths[abs_temp / 100] + INFO_KERNING;
+    abs_temp %= 100;
+    width += s_info_digit_widths[abs_temp / 10] + INFO_KERNING;
+    width += s_info_digit_widths[abs_temp % 10] + INFO_KERNING;
+  } else if (abs_temp >= 10) {
+    width += s_info_digit_widths[abs_temp / 10] + INFO_KERNING;
+    width += s_info_digit_widths[abs_temp % 10] + INFO_KERNING;
+  } else {
+    width += s_info_digit_widths[abs_temp] + INFO_KERNING;
+  }
+
+  // Unit suffix
+  width += metric ? INFO_CHAR_WIDTH_C : INFO_CHAR_WIDTH_F;
+
+  return width;
+}
+
 static GColor get_condition_color(const char *condition) {
   // Clear/Sunny
   if (strstr(condition, "CLEAR")) {
@@ -751,6 +800,17 @@ static void update_weather_layers() {
           break;
       }
       text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
+
+      // Reposition "/" and high temp based on current temp width
+      int display_temp = settings.weather_use_metric ? settings.temperature : s_cached_temp_f;
+      int current_width = get_temp_text_width(display_temp, settings.weather_use_metric);
+      GRect temp_frame = layer_get_frame(text_layer_get_layer(s_temperature_layer));
+      int slash_x = temp_frame.origin.x + current_width + 2;
+      int high_x = slash_x + INFO_CHAR_WIDTH_SLASH + 2;
+      layer_set_frame(text_layer_get_layer(s_temp_slash_layer),
+        GRect(slash_x, temp_frame.origin.y, 10, TEXT_HEIGHT));
+      layer_set_frame(text_layer_get_layer(s_temp_high_layer),
+        GRect(high_x, temp_frame.origin.y, 60, TEXT_HEIGHT));
       #endif
 
       // Update conditions when current temp changes (they come together)
