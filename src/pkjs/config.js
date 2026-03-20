@@ -107,13 +107,13 @@ const config = [
                 "type": "toggle",
                 "messageKey": "PREF_WEATHER_METRIC",
                 "label": "Use metric units (Celsius)",
-                "defaultValue": true
+                "defaultValue": false
             },
             {
                 "type": "toggle",
                 "messageKey": "PREF_SKIP_LOCATION",
                 "label": "Skip location (use 0,0)",
-                "defaultValue": true
+                "defaultValue": false
             },
             {
                 "type": "text",

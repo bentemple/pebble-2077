@@ -3,7 +3,7 @@ const clayConfig = require('./config')
 
 // Cached settings from Clay
 let settings = {
-    skipLocation: true  // Default
+    skipLocation: false  // Default
 }
 
 function loadSettings() {

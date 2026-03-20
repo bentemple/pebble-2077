@@ -1279,7 +1279,7 @@ static void default_settings() {
   settings.show_steps = true;
   settings.show_weather = true;
   settings.weather_use_metric = false;
-  settings.skip_location = true;  // Default to skip (for Gadgetbridge users)
+  settings.skip_location = false;
   settings.hour_vibe = false;
   settings.disconnect_alert = true;
   settings.temperature = (int)NULL;
