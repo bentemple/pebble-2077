@@ -46,6 +46,8 @@
   #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT + 3)
   #define DAY_LAYER_WIDTH (HUD_WIDTH - DAY_LAYER_OFFSET_X)
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
+  #define TEMP_SLASH_OFFSET 40   // X offset for "/" in split temp display
+  #define TEMP_HIGH_OFFSET 50    // X offset for high temp in split temp display
 
   // ============================================================
   // DYNAMIC COLOR CONFIGURATION (easy to tweak)
@@ -182,6 +184,10 @@ static TextLayer *s_custom_layer;
 static TextLayer *s_bt_layer;
 static TextLayer *s_step_layer;
 static TextLayer *s_temperature_layer;
+#if defined(PBL_PLATFORM_EMERY)
+static TextLayer *s_temp_slash_layer;
+static TextLayer *s_temp_high_layer;
+#endif
 static TextLayer *s_condition_layer;
 
 static BitmapLayer *s_hud_layer;
@@ -227,7 +233,8 @@ static bool s_needs_sleep_tracking = false;  // uptime OR sleep progress mode
 
 // Cached settings that rarely change
 static bool s_is_24h_style = true;
-static int s_cached_temp_f = 0;  // Pre-calculated Fahrenheit
+static int s_cached_temp_f = 0;      // Pre-calculated current temp Fahrenheit
+static int s_cached_temp_high_f = 0; // Pre-calculated high temp Fahrenheit
 static const char *s_time_format = "%H:%M";  // Cached format string
 
 #if defined(PBL_PLATFORM_EMERY)
@@ -236,6 +243,7 @@ static const char *s_time_format = "%H:%M";  // Cached format string
 static GColor s_effective_date_color = { .argb = GColorWhiteARGB8 };
 static GColor s_effective_colon_color = { .argb = GColorWhiteARGB8 };
 static GColor s_effective_temp_color = { .argb = GColorWhiteARGB8 };
+static GColor s_effective_temp_high_color = { .argb = GColorWhiteARGB8 };
 static GColor s_effective_condition_color = { .argb = GColorWhiteARGB8 };
 static GColor s_effective_progress_color = { .argb = GColorWhiteARGB8 };
 // Cached layer origins (never change after layout)
@@ -250,6 +258,7 @@ static int s_last_minute = -1;
 static int s_last_hour = -1;
 static int s_last_step_count = -1;
 static int s_last_temperature = -999;
+static int s_last_temperature_high = -999;
 static bool s_last_steps_visible = false;
 
 // Cached formatted strings (avoid reformatting when unchanged)
@@ -286,6 +295,7 @@ typedef enum {
 typedef struct ClaySettings {
   bool show_steps, show_weather, weather_use_metric, skip_location, hour_vibe, disconnect_alert;
   int temperature;
+  int temperature_high;
   int progress_bar_mode;  // 0=battery, 1=steps, 2=sleep
   int step_goal;
   int sleep_goal_mins;
@@ -708,9 +718,13 @@ static void update_weather_layers() {
   if (settings.show_weather && settings.temperature) {
     static char temperature_buffer[8];
     static char conditions_buffer[32];
+    #if defined(PBL_PLATFORM_EMERY)
+    static char temp_high_buffer[8];
+    #endif
 
-    // Only reformat strings if temperature changed
-    if (settings.temperature != s_last_temperature) {
+    // Update current temperature display if changed
+    bool current_changed = (settings.temperature != s_last_temperature);
+    if (current_changed) {
       s_last_temperature = settings.temperature;
 
       if (settings.weather_use_metric) {
@@ -718,13 +732,10 @@ static void update_weather_layers() {
       } else {
         snprintf(temperature_buffer, sizeof(temperature_buffer), "%dF", s_cached_temp_f);
       }
-      strncpy(conditions_buffer, settings.condition, sizeof(conditions_buffer));
-
-      text_layer_set_text(s_condition_layer, conditions_buffer);
       text_layer_set_text(s_temperature_layer, temperature_buffer);
 
       #if defined(PBL_PLATFORM_EMERY)
-      // Recompute cached colors for new weather data
+      // Update current temp color
       switch (settings.temperature_color_mode) {
         case COLOR_MODE_DISABLED:
           s_effective_temp_color = color_fg;
@@ -737,6 +748,14 @@ static void update_weather_layers() {
           s_effective_temp_color = get_temperature_color(s_cached_temp_f);
           break;
       }
+      text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
+      #endif
+
+      // Update conditions when current temp changes (they come together)
+      strncpy(conditions_buffer, settings.condition, sizeof(conditions_buffer));
+      text_layer_set_text(s_condition_layer, conditions_buffer);
+
+      #if defined(PBL_PLATFORM_EMERY)
       switch (settings.weather_color_mode) {
         case COLOR_MODE_DISABLED:
           s_effective_condition_color = color_fg;
@@ -749,10 +768,51 @@ static void update_weather_layers() {
           s_effective_condition_color = get_condition_color(settings.condition);
           break;
       }
-      text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
       text_layer_set_text_color(s_condition_layer, s_effective_condition_color);
       #endif
     }
+
+    #if defined(PBL_PLATFORM_EMERY)
+    // Update high temperature display if changed (independent of current)
+    if (settings.temperature_high != s_last_temperature_high) {
+      s_last_temperature_high = settings.temperature_high;
+
+      if (settings.weather_use_metric) {
+        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dC", settings.temperature_high);
+      } else {
+        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dF", s_cached_temp_high_f);
+      }
+      text_layer_set_text(s_temp_high_layer, temp_high_buffer);
+
+      // Update high temp color
+      switch (settings.temperature_color_mode) {
+        case COLOR_MODE_DISABLED:
+          s_effective_temp_high_color = color_fg;
+          break;
+        case COLOR_MODE_STATIC:
+          s_effective_temp_high_color = settings.temperature_static_color;
+          break;
+        case COLOR_MODE_DYNAMIC:
+        default:
+          s_effective_temp_high_color = get_temperature_color(s_cached_temp_high_f);
+          break;
+      }
+      text_layer_set_text_color(s_temp_high_layer, s_effective_temp_high_color);
+    }
+    #else
+    // Non-Emery: combined display, update when either changes
+    if (current_changed || settings.temperature_high != s_last_temperature_high) {
+      s_last_temperature_high = settings.temperature_high;
+      if (settings.weather_use_metric) {
+        snprintf(temperature_buffer, sizeof(temperature_buffer), "%d/%dC",
+                 settings.temperature, settings.temperature_high);
+      } else {
+        snprintf(temperature_buffer, sizeof(temperature_buffer), "%d/%dF",
+                 s_cached_temp_f, s_cached_temp_high_f);
+      }
+      text_layer_set_text(s_temperature_layer, temperature_buffer);
+    }
+    #endif
 
     // Only recalculate positions if step visibility changed
     bool steps_visible = !layer_get_hidden(text_layer_get_layer(s_step_layer));
@@ -782,10 +842,18 @@ static void update_weather_layers() {
 
     layer_set_hidden(text_layer_get_layer(s_condition_layer), false);
     layer_set_hidden(text_layer_get_layer(s_temperature_layer), false);
+    #if defined(PBL_PLATFORM_EMERY)
+    layer_set_hidden(text_layer_get_layer(s_temp_slash_layer), false);
+    layer_set_hidden(text_layer_get_layer(s_temp_high_layer), false);
+    #endif
   }
   else {
     layer_set_hidden(text_layer_get_layer(s_condition_layer), true);
     layer_set_hidden(text_layer_get_layer(s_temperature_layer), true);
+    #if defined(PBL_PLATFORM_EMERY)
+    layer_set_hidden(text_layer_get_layer(s_temp_slash_layer), true);
+    layer_set_hidden(text_layer_get_layer(s_temp_high_layer), true);
+    #endif
   }
 }
 
@@ -824,13 +892,16 @@ static void cache_effective_colors() {
   switch (settings.temperature_color_mode) {
     case COLOR_MODE_DISABLED:
       s_effective_temp_color = color_fg;
+      s_effective_temp_high_color = color_fg;
       break;
     case COLOR_MODE_STATIC:
       s_effective_temp_color = settings.temperature_static_color;
+      s_effective_temp_high_color = settings.temperature_static_color;
       break;
     case COLOR_MODE_DYNAMIC:
     default:
       s_effective_temp_color = get_temperature_color(s_cached_temp_f);
+      s_effective_temp_high_color = get_temperature_color(s_cached_temp_high_f);
       break;
   }
 
@@ -1040,6 +1111,20 @@ static void main_window_load(Window *window) {
   // weather
   load_info_layer(&s_condition_layer, condition_y);
   load_info_layer(&s_temperature_layer, temperature_y);
+  #if defined(PBL_PLATFORM_EMERY)
+  // Split temperature: "72F" "/" "85F" with independent colors
+  // Position slash and high temp relative to current temp
+  s_temp_slash_layer = text_layer_create(GRect(MARGIN_SIZE + TEMP_SLASH_OFFSET, temperature_y, 10, TEXT_HEIGHT));
+  text_layer_set_background_color(s_temp_slash_layer, GColorClear);
+  text_layer_set_text_color(s_temp_slash_layer, color_fg);
+  text_layer_set_font(s_temp_slash_layer, s_text_font);
+  text_layer_set_text(s_temp_slash_layer, "/");
+
+  s_temp_high_layer = text_layer_create(GRect(MARGIN_SIZE + TEMP_HIGH_OFFSET, temperature_y, 60, TEXT_HEIGHT));
+  text_layer_set_background_color(s_temp_high_layer, GColorClear);
+  text_layer_set_text_color(s_temp_high_layer, color_fg);
+  text_layer_set_font(s_temp_high_layer, s_text_font);
+  #endif
 
   // add children
   layer_add_child(window_layer, s_progress_layer);
@@ -1053,6 +1138,8 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_condition_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
   #if defined(PBL_PLATFORM_EMERY)
+  layer_add_child(window_layer, text_layer_get_layer(s_temp_slash_layer));
+  layer_add_child(window_layer, text_layer_get_layer(s_temp_high_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_hours_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_colon_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_mins_layer));
@@ -1076,6 +1163,10 @@ static void main_window_unload(Window *window) {
   text_layer_destroy(s_bt_layer);
   text_layer_destroy(s_step_layer);
   text_layer_destroy(s_temperature_layer);
+  #if defined(PBL_PLATFORM_EMERY)
+  text_layer_destroy(s_temp_slash_layer);
+  text_layer_destroy(s_temp_high_layer);
+  #endif
   text_layer_destroy(s_condition_layer);
   gbitmap_destroy(s_hud_bitmap);
   bitmap_layer_destroy(s_hud_layer);
@@ -1213,6 +1304,7 @@ static void default_settings() {
 
 static void cache_derived_values() {
   s_cached_temp_f = settings.temperature * 9 / 5 + 32;
+  s_cached_temp_high_f = settings.temperature_high * 9 / 5 + 32;
   s_is_24h_style = clock_is_24h_style();
   s_time_format = s_is_24h_style ? "%H:%M" : "%I:%M";
 }
@@ -1236,6 +1328,7 @@ static void save_settings() {
   s_last_progress_percent = -1;
   s_last_step_count = -1;
   s_last_temperature = -999;
+  s_last_temperature_high = -999;
 
   // Initialize wake time if user enabled uptime display
   if (s_any_needs_uptime) {
@@ -1251,10 +1344,15 @@ static void save_settings() {
 
 static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
   Tuple *temperature_t = dict_find(it, MESSAGE_KEY_TEMPERATURE);
+  Tuple *temperature_high_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_HIGH);
   Tuple *conditions_t = dict_find(it, MESSAGE_KEY_CONDITIONS);
   if (temperature_t && conditions_t) {
     settings.temperature = temperature_t->value->int32;
     s_cached_temp_f = settings.temperature * 9 / 5 + 32;  // Pre-calculate Fahrenheit
+    if (temperature_high_t) {
+      settings.temperature_high = temperature_high_t->value->int32;
+      s_cached_temp_high_f = settings.temperature_high * 9 / 5 + 32;
+    }
     strncpy(settings.condition, conditions_t->value->cstring, sizeof(settings.condition));
   }
   

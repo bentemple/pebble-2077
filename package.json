@@ -31,6 +31,7 @@
     },
     "messageKeys": [
       "TEMPERATURE",
+      "TEMPERATURE_HIGH",
       "CONDITIONS",
       "PREF_SHOW_STEPS",
       "PREF_SHOW_WEATHER",

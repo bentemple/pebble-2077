@@ -21,102 +21,6 @@ const config = [
     },
     {
         "type": "section",
-        "capabilities": ["COLOR"],
-        "items": [
-            {
-                "type": "heading",
-                "defaultValue": "Colors"
-            },
-            {
-                "type": "select",
-                "messageKey": "PREF_PROGRESS_COLOR_MODE",
-                "label": "Progress bar color",
-                "defaultValue": "2",
-                "options": [
-                    { "value": "0", "label": "Disabled" },
-                    { "value": "1", "label": "Static" },
-                    { "value": "2", "label": "Dynamic" }
-                ]
-            },
-            {
-                "type": "color",
-                "messageKey": "PREF_PROGRESS_STATIC_COLOR",
-                "label": "Progress bar static color",
-                "defaultValue": "0xFFFFFF",
-                "sunlight": true
-            },
-            {
-                "type": "select",
-                "messageKey": "PREF_TEMPERATURE_COLOR_MODE",
-                "label": "Temperature color",
-                "defaultValue": "2",
-                "options": [
-                    { "value": "0", "label": "Disabled" },
-                    { "value": "1", "label": "Static" },
-                    { "value": "2", "label": "Dynamic" }
-                ]
-            },
-            {
-                "type": "color",
-                "messageKey": "PREF_TEMPERATURE_STATIC_COLOR",
-                "label": "Temperature static color",
-                "defaultValue": "0xFFFFFF",
-                "sunlight": true
-            },
-            {
-                "type": "select",
-                "messageKey": "PREF_WEATHER_COLOR_MODE",
-                "label": "Weather color",
-                "defaultValue": "2",
-                "options": [
-                    { "value": "0", "label": "Disabled" },
-                    { "value": "1", "label": "Static" },
-                    { "value": "2", "label": "Dynamic" }
-                ]
-            },
-            {
-                "type": "color",
-                "messageKey": "PREF_WEATHER_STATIC_COLOR",
-                "label": "Weather static color",
-                "defaultValue": "0xFFFFFF",
-                "sunlight": true
-            },
-            {
-                "type": "toggle",
-                "messageKey": "PREF_COLORIZE_DATE",
-                "label": "Colorize date",
-                "defaultValue": true
-            },
-            {
-                "type": "color",
-                "messageKey": "PREF_DATE_COLOR",
-                "label": "Date color",
-                "defaultValue": "0xFFFFFF",
-                "sunlight": true
-            },
-            {
-                "type": "toggle",
-                "messageKey": "PREF_COLORIZE_COLON",
-                "label": "Colorize colon",
-                "defaultValue": true
-            },
-            {
-                "type": "color",
-                "messageKey": "PREF_COLON_COLOR",
-                "label": "Colon color",
-                "defaultValue": "0xFFFFFF",
-                "sunlight": true
-            },
-            {
-                "type": "toggle",
-                "messageKey": "PREF_BOLD_HOURS",
-                "label": "Bold hours",
-                "defaultValue": true
-            }
-        ]
-    },
-    {
-        "type": "section",
         "items": [
             {
                 "type": "heading",
@@ -159,6 +63,26 @@ const config = [
                 "attributes": {
                     "type": "number"
                 }
+            },
+            {
+                "type": "select",
+                "messageKey": "PREF_PROGRESS_COLOR_MODE",
+                "label": "Color",
+                "defaultValue": "2",
+                "capabilities": ["COLOR"],
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_PROGRESS_STATIC_COLOR",
+                "label": "Static color",
+                "defaultValue": "0xFFFFFF",
+                "capabilities": ["COLOR"],
+                "sunlight": true
             }
         ]
     },
@@ -194,6 +118,98 @@ const config = [
             {
                 "type": "text",
                 "defaultValue": "Enable 'Skip location' if using Gadgetbridge or another app that intercepts weather requests. Disable to use real GPS location."
+            },
+            {
+                "type": "select",
+                "messageKey": "PREF_TEMPERATURE_COLOR_MODE",
+                "label": "Temperature color",
+                "defaultValue": "2",
+                "capabilities": ["COLOR"],
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_TEMPERATURE_STATIC_COLOR",
+                "label": "Temperature static color",
+                "defaultValue": "0xFFFFFF",
+                "capabilities": ["COLOR"],
+                "sunlight": true
+            },
+            {
+                "type": "select",
+                "messageKey": "PREF_WEATHER_COLOR_MODE",
+                "label": "Condition color",
+                "defaultValue": "2",
+                "capabilities": ["COLOR"],
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_WEATHER_STATIC_COLOR",
+                "label": "Condition static color",
+                "defaultValue": "0xFFFFFF",
+                "capabilities": ["COLOR"],
+                "sunlight": true
+            }
+        ]
+    },
+    {
+        "type": "section",
+        "capabilities": ["COLOR"],
+        "items": [
+            {
+                "type": "heading",
+                "defaultValue": "Time"
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_BOLD_HOURS",
+                "label": "Bold hours",
+                "defaultValue": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_COLON",
+                "label": "Colorize colon",
+                "defaultValue": true
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_COLON_COLOR",
+                "label": "Colon color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
+            }
+        ]
+    },
+    {
+        "type": "section",
+        "capabilities": ["COLOR"],
+        "items": [
+            {
+                "type": "heading",
+                "defaultValue": "Date"
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_DATE",
+                "label": "Colorize date",
+                "defaultValue": true
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_DATE_COLOR",
+                "label": "Date color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
             }
         ]
     },
