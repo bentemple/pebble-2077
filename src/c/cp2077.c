@@ -296,6 +296,8 @@ typedef struct ClaySettings {
   bool show_steps, show_weather, weather_use_metric, skip_location, hour_vibe, disconnect_alert;
   int temperature;
   int temperature_high;
+  int temperature_high_tomorrow;
+  int sunset_hour;
   int progress_bar_mode;  // 0=battery, 1=steps, 2=sleep
   int step_goal;
   int sleep_goal_mins;
@@ -772,15 +774,23 @@ static void update_weather_layers() {
       #endif
     }
 
+    // Determine which high to display: tomorrow's after sunset, today's before
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    int current_hour = t->tm_hour;
+    bool use_tomorrow = (current_hour >= settings.sunset_hour);
+    int effective_high = use_tomorrow ? settings.temperature_high_tomorrow : settings.temperature_high;
+    int effective_high_f = effective_high * 9 / 5 + 32;
+
     #if defined(PBL_PLATFORM_EMERY)
     // Update high temperature display if changed (independent of current)
-    if (settings.temperature_high != s_last_temperature_high) {
-      s_last_temperature_high = settings.temperature_high;
+    if (effective_high != s_last_temperature_high) {
+      s_last_temperature_high = effective_high;
 
       if (settings.weather_use_metric) {
-        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dC", settings.temperature_high);
+        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dC", effective_high);
       } else {
-        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dF", s_cached_temp_high_f);
+        snprintf(temp_high_buffer, sizeof(temp_high_buffer), "%dF", effective_high_f);
       }
       text_layer_set_text(s_temp_high_layer, temp_high_buffer);
 
@@ -794,21 +804,21 @@ static void update_weather_layers() {
           break;
         case COLOR_MODE_DYNAMIC:
         default:
-          s_effective_temp_high_color = get_temperature_color(s_cached_temp_high_f);
+          s_effective_temp_high_color = get_temperature_color(effective_high_f);
           break;
       }
       text_layer_set_text_color(s_temp_high_layer, s_effective_temp_high_color);
     }
     #else
     // Non-Emery: combined display, update when either changes
-    if (current_changed || settings.temperature_high != s_last_temperature_high) {
-      s_last_temperature_high = settings.temperature_high;
+    if (current_changed || effective_high != s_last_temperature_high) {
+      s_last_temperature_high = effective_high;
       if (settings.weather_use_metric) {
         snprintf(temperature_buffer, sizeof(temperature_buffer), "%d/%dC",
-                 settings.temperature, settings.temperature_high);
+                 settings.temperature, effective_high);
       } else {
         snprintf(temperature_buffer, sizeof(temperature_buffer), "%d/%dF",
-                 s_cached_temp_f, s_cached_temp_high_f);
+                 s_cached_temp_f, effective_high_f);
       }
       text_layer_set_text(s_temperature_layer, temperature_buffer);
     }
@@ -888,6 +898,13 @@ static void cache_effective_colors() {
   s_effective_colon_color = settings.colorize_colon ? settings.colon_color : color_fg;
   s_effective_date_color = settings.colorize_date ? settings.date_color : color_fg;
 
+  // Determine effective high temp based on sunset
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  bool use_tomorrow = (t->tm_hour >= settings.sunset_hour);
+  int effective_high = use_tomorrow ? settings.temperature_high_tomorrow : settings.temperature_high;
+  int effective_high_f = effective_high * 9 / 5 + 32;
+
   // Temperature color based on mode
   switch (settings.temperature_color_mode) {
     case COLOR_MODE_DISABLED:
@@ -901,7 +918,7 @@ static void cache_effective_colors() {
     case COLOR_MODE_DYNAMIC:
     default:
       s_effective_temp_color = get_temperature_color(s_cached_temp_f);
-      s_effective_temp_high_color = get_temperature_color(s_cached_temp_high_f);
+      s_effective_temp_high_color = get_temperature_color(effective_high_f);
       break;
   }
 
@@ -1204,6 +1221,9 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 
   // Refresh weather every hour
   if (tick_time->tm_min == 0 && settings.show_weather) {
+    // Re-evaluate which high to display (may switch at sunset)
+    update_weather_layers();
+
     DictionaryIterator *it;
     app_message_outbox_begin(&it);
     dict_write_uint8(it, 0, 0);
@@ -1284,6 +1304,8 @@ static void default_settings() {
   settings.disconnect_alert = true;
   settings.temperature = -999;  // Sentinel: no weather data yet
   settings.temperature_high = -999;  // Sentinel: no weather data yet
+  settings.temperature_high_tomorrow = -999;
+  settings.sunset_hour = 18;  // Default 6pm
   settings.progress_bar_mode = PROGRESS_MODE_SLEEP;
   settings.step_goal = DEFAULT_STEP_GOAL;
   settings.sleep_goal_mins = DEFAULT_SLEEP_GOAL_MINS;
@@ -1353,6 +1375,14 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
     if (temperature_high_t) {
       settings.temperature_high = temperature_high_t->value->int32;
       s_cached_temp_high_f = settings.temperature_high * 9 / 5 + 32;
+    }
+    Tuple *temperature_high_tomorrow_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_HIGH_TOMORROW);
+    if (temperature_high_tomorrow_t) {
+      settings.temperature_high_tomorrow = temperature_high_tomorrow_t->value->int32;
+    }
+    Tuple *sunset_hour_t = dict_find(it, MESSAGE_KEY_SUNSET_HOUR);
+    if (sunset_hour_t) {
+      settings.sunset_hour = sunset_hour_t->value->int32;
     }
     strncpy(settings.condition, conditions_t->value->cstring, sizeof(settings.condition));
   }

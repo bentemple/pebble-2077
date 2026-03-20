@@ -32,6 +32,8 @@
     "messageKeys": [
       "TEMPERATURE",
       "TEMPERATURE_HIGH",
+      "TEMPERATURE_HIGH_TOMORROW",
+      "SUNSET_HOUR",
       "CONDITIONS",
       "PREF_SHOW_STEPS",
       "PREF_SHOW_WEATHER",

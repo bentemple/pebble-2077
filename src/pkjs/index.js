@@ -87,19 +87,23 @@ const xhrRequest = function (url, type, callback) {
 };
 
 function fetchWeatherWithCoords(lat, lon) {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max&timezone=auto`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,sunset&timezone=auto`
 
     xhrRequest(url, 'GET',
         (res) => {
             const data = JSON.parse(res)
             const temp = Math.round(data.current_weather.temperature)
-            const tempHigh = Math.round(data.daily.temperature_2m_max[0])
+            const tempHighToday = Math.round(data.daily.temperature_2m_max[0])
+            const tempHighTomorrow = Math.round(data.daily.temperature_2m_max[1])
+            const sunsetHour = new Date(data.daily.sunset[0]).getHours()
             const weather_code = parseInt(data.current_weather.weathercode)
             const conditions = getWeatherDescription(weather_code)
 
             const dictionary = {
                 'TEMPERATURE': temp,
-                'TEMPERATURE_HIGH': tempHigh,
+                'TEMPERATURE_HIGH': tempHighToday,
+                'TEMPERATURE_HIGH_TOMORROW': tempHighTomorrow,
+                'SUNSET_HOUR': sunsetHour,
                 'CONDITIONS': conditions
             }
 
