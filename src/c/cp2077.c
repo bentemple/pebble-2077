@@ -11,9 +11,9 @@
   #define MARGIN_SIZE 7
   #define HUD_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
   #define HUD_HEIGHT 40
-  #define TEXT_HEIGHT 14
+  #define TEXT_HEIGHT 20
   #define TIME_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
-  #define TIME_LAYER_HEIGHT 76
+  #define TIME_LAYER_HEIGHT 86
   #define DATE_LAYER_SIZE 36
   #define PROGRESS_BAR_OFFSET_X 43
   #define PROGRESS_BAR_OFFSET_Y 13
@@ -524,12 +524,14 @@ static void progress_update_proc(Layer *layer, GContext *ctx) {
 
 static void load_fonts() {
   #if defined(PBL_PLATFORM_EMERY)
-    s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_76));
+    s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86));
+    s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_25));
+    s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_17));
   #else
     s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_58));
+    s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_24));
+    s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_12));
   #endif
-  s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_24));
-  s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_12));
 }
 
 static void load_progress_layer(int x, int y) {

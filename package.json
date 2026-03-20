@@ -66,8 +66,8 @@
         },
         {
           "type": "font",
-          "name": "FONT_RAJDHANI_76",
-          "file": "fonts/Rajdhani-Regular.ttf",
+          "name": "FONT_RAJDHANI_86",
+          "file": "fonts/Rajdhani-Medium.ttf",
           "characterRegex": "[0-9:]",
           "targetPlatforms": ["emery"]
         },
@@ -75,13 +75,29 @@
           "type": "font",
           "name": "FONT_RAJDHANI_24",
           "file": "fonts/Rajdhani-Regular.ttf",
-          "characterRegex": "[0-9]"
+          "characterRegex": "[0-9]",
+          "targetPlatforms": ["aplite", "basalt", "diorite"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_RAJDHANI_25",
+          "file": "fonts/Rajdhani-Medium.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": ["emery"]
         },
         {
           "type": "font",
           "name": "FONT_ORBITRON_12",
           "file": "fonts/Orbitron-Regular.ttf",
-          "characterRegex": "[ -~]"
+          "characterRegex": "[ -~]",
+          "targetPlatforms": ["aplite", "basalt", "diorite"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ORBITRON_17",
+          "file": "fonts/Orbitron-SemiBold.ttf",
+          "characterRegex": "[ -~]",
+          "targetPlatforms": ["emery"]
         },
         {
           "type": "bitmap",
