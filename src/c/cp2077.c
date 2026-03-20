@@ -46,6 +46,93 @@
   #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT + 3)
   #define DAY_LAYER_WIDTH (HUD_WIDTH - DAY_LAYER_OFFSET_X)
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
+
+  // ============================================================
+  // DYNAMIC COLOR CONFIGURATION (easy to tweak)
+  // ============================================================
+
+  // Progress bar color definitions
+  #define PROGRESS_COLOR_0    GColorDarkCandyAppleRedARGB8  // Critical
+  #define PROGRESS_COLOR_10   GColorRedARGB8                // Very low
+  #define PROGRESS_COLOR_20   GColorFollyARGB8              // Low
+  #define PROGRESS_COLOR_30   GColorOrangeARGB8             // Below average
+  #define PROGRESS_COLOR_40   GColorChromeYellowARGB8       // Approaching average
+  #define PROGRESS_COLOR_50   GColorYellowARGB8             // Average
+  #define PROGRESS_COLOR_60   GColorSpringBudARGB8          // Above average
+  #define PROGRESS_COLOR_70   GColorGreenARGB8              // Good
+  #define PROGRESS_COLOR_80   GColorBrightGreenARGB8        // Great
+  #define PROGRESS_COLOR_90   GColorBrightGreenARGB8        // Excellent
+  #define PROGRESS_COLOR_100  GColorVividCeruleanARGB8      // 100% celebration
+
+  // Compile-time LUT for progress bar colors (0-100, O(1) lookup)
+  // Uses GCC range designators - easy to edit ranges directly!
+  // NOTE: Missing indices are zero-initialized (invalid color = gap detected)
+  static const uint8_t s_progress_lut[101] = {
+    [0 ... 9]   = PROGRESS_COLOR_0,
+    [10 ... 19] = PROGRESS_COLOR_10,
+    [20 ... 29] = PROGRESS_COLOR_20,
+    [30 ... 39] = PROGRESS_COLOR_30,
+    [40 ... 49] = PROGRESS_COLOR_40,
+    [50 ... 59] = PROGRESS_COLOR_50,
+    [60 ... 69] = PROGRESS_COLOR_60,
+    [70 ... 79] = PROGRESS_COLOR_70,
+    [80 ... 89] = PROGRESS_COLOR_80,
+    [90 ... 99] = PROGRESS_COLOR_90,
+    [100]       = PROGRESS_COLOR_100,
+  };
+  _Static_assert(sizeof(s_progress_lut) == 101, "Progress LUT must cover 0-100");
+  // NOTE: Gaps in ranges are zero-initialized by C. Since valid GColor ARGB8
+  // values have alpha bits set (0xC0+), a zero would render as transparent/wrong.
+
+  // Temperature color definitions (Fahrenheit)
+  // Green = comfortable, Orange/Red = hot, Blue = cold
+  #define TEMP_COLOR_BELOW_0   GColorWhiteARGB8             // Freezing
+  #define TEMP_COLOR_FRIGID    GColorWhiteARGB8             // 0-19°F
+  #define TEMP_COLOR_VERY_COLD GColorCelesteARGB8           // 20-31°F
+  #define TEMP_COLOR_FREEZING  GColorCyanARGB8              // 32-39°F
+  #define TEMP_COLOR_COLD      GColorPictonBlueARGB8        // 40-44°F
+  #define TEMP_COLOR_CHILLY    GColorCyanARGB8              // 45-49°F
+  #define TEMP_COLOR_COOL      GColorYellowARGB8            // 50-54°F (transition)
+  #define TEMP_COLOR_SLIGHT    GColorSpringBudARGB8         // 55-59°F (yellow-green)
+  #define TEMP_COLOR_COMFORT   GColorGreenARGB8             // 60-64°F
+  #define TEMP_COLOR_IDEAL     GColorGreenARGB8             // 65-69°F
+  #define TEMP_COLOR_PERFECT   GColorBrightGreenARGB8       // 70-74°F
+  #define TEMP_COLOR_WARM      GColorChromeYellowARGB8      // 75-79°F
+  #define TEMP_COLOR_HOT       GColorOrangeARGB8            // 80-89°F
+  #define TEMP_COLOR_VERY_HOT  GColorRedARGB8               // 90-99°F
+  #define TEMP_COLOR_SCORCHING GColorDarkCandyAppleRedARGB8 // 100°F+
+
+  // Compile-time LUT for temperature colors (0-100°F, O(1) lookup)
+  // Uses GCC range designators - easy to edit ranges directly!
+  // Handle < 0 and > 100 with bounds check in get_temperature_color()
+  // NOTE: Missing indices are zero-initialized (invalid color = gap detected)
+  static const uint8_t s_temp_lut[101] = {
+    [0 ... 19]  = TEMP_COLOR_FRIGID,    // Frigid
+    [20 ... 31] = TEMP_COLOR_VERY_COLD, // Very cold
+    [32 ... 39] = TEMP_COLOR_FREEZING,  // Near freezing
+    [40 ... 44] = TEMP_COLOR_COLD,      // Cold
+    [45 ... 49] = TEMP_COLOR_CHILLY,    // Chilly
+    [50 ... 54] = TEMP_COLOR_COOL,      // Transition (yellow)
+    [55 ... 59] = TEMP_COLOR_SLIGHT,    // Slightly cool (yellow-green)
+    [60 ... 64] = TEMP_COLOR_COMFORT,   // Comfortable (green)
+    [65 ... 69] = TEMP_COLOR_IDEAL,     // Ideal (green)
+    [70 ... 74] = TEMP_COLOR_PERFECT,   // Perfect (bright green)
+    [75 ... 79] = TEMP_COLOR_WARM,      // Getting warm (yellow-orange)
+    [80 ... 89] = TEMP_COLOR_HOT,       // Hot (orange)
+    [90 ... 99] = TEMP_COLOR_VERY_HOT,  // Very hot (red)
+    [100]       = TEMP_COLOR_SCORCHING, // Scorching (dark red)
+  };
+  _Static_assert(sizeof(s_temp_lut) == 101, "Temperature LUT must cover 0-100");
+
+  // Weather condition colors
+  #define WEATHER_COLOR_CLEAR     GColorYellowARGB8
+  #define WEATHER_COLOR_THUNDER   GColorPurpleARGB8
+  #define WEATHER_COLOR_SNOW      GColorWhiteARGB8
+  #define WEATHER_COLOR_FREEZING  GColorCyanARGB8
+  #define WEATHER_COLOR_RAIN      GColorPictonBlueARGB8
+  #define WEATHER_COLOR_FOG       GColorDarkGrayARGB8
+  #define WEATHER_COLOR_CLOUD     GColorLightGrayARGB8
+
 #else
   // Original Pebble/Time/2: 144x168
   #define SCREEN_WIDTH 144
@@ -102,8 +189,8 @@ static GBitmap *s_hud_bitmap;
 static BitmapLayer *s_charge_layer;
 static GBitmap *s_charge_bitmap;
 
-static GColor color_fg;
-static GColor color_bg;
+static GColor color_fg = { .argb = GColorWhiteARGB8 };
+static GColor color_bg = { .argb = GColorBlackARGB8 };
 
 static int s_progress_percent;
 static Layer *s_progress_layer;
@@ -144,11 +231,13 @@ static int s_cached_temp_f = 0;  // Pre-calculated Fahrenheit
 static const char *s_time_format = "%H:%M";  // Cached format string
 
 #if defined(PBL_PLATFORM_EMERY)
-// Pre-computed effective colors (updated when settings change)
-static GColor s_effective_date_color;
-static GColor s_effective_colon_color;
-static GColor s_effective_temp_color;
-static GColor s_effective_condition_color;
+// Pre-computed effective colors (updated when values/settings change)
+// Initialize to white to avoid black text on first load before settings apply
+static GColor s_effective_date_color = { .argb = GColorWhiteARGB8 };
+static GColor s_effective_colon_color = { .argb = GColorWhiteARGB8 };
+static GColor s_effective_temp_color = { .argb = GColorWhiteARGB8 };
+static GColor s_effective_condition_color = { .argb = GColorWhiteARGB8 };
+static GColor s_effective_progress_color = { .argb = GColorWhiteARGB8 };
 // Cached layer origins (never change after layout)
 static int s_hours_layer_x = 0;
 static int s_hours_layer_y = 0;
@@ -187,6 +276,13 @@ static char s_date_buffer[8];
 static char s_day_buffer[32];
 static char s_custom_buffer[32];
 
+// Color mode: 0=disabled, 1=static, 2=dynamic
+typedef enum {
+  COLOR_MODE_DISABLED = 0,
+  COLOR_MODE_STATIC = 1,
+  COLOR_MODE_DYNAMIC = 2
+} ColorMode;
+
 typedef struct ClaySettings {
   bool show_steps, show_weather, weather_use_metric, skip_location, hour_vibe, disconnect_alert;
   int temperature;
@@ -194,7 +290,9 @@ typedef struct ClaySettings {
   int step_goal;
   int sleep_goal_mins;
   // Color options (Emery only)
-  bool colorize_progress, colorize_temperature, colorize_weather, colorize_date, colorize_colon;
+  int progress_color_mode, temperature_color_mode, weather_color_mode;
+  GColor progress_static_color, temperature_static_color, weather_static_color;
+  bool colorize_date, colorize_colon;
   bool bold_hours;
   GColor date_color, colon_color;
   char custom_text[32], bottom_text[32], condition[32];
@@ -562,49 +660,44 @@ static void update_steps() {
 
 #if defined(PBL_PLATFORM_EMERY)
 static GColor get_temperature_color(int temp_f) {
-  if (temp_f >= 90) {
-    return GColorRed;
-  } else if (temp_f >= 80) {
-    return GColorOrange;
-  } else if (temp_f >= 70) {
-    return GColorGreen;
-  } else if (temp_f >= 50) {
-    return GColorYellow;
-  } else if (temp_f >= 32) {
-    return GColorPictonBlue;
-  } else {
-    return GColorWhite;
+  // O(1) lookup using compile-time LUT with bounds check
+  if (temp_f < 0) {
+    return (GColor){ .argb = TEMP_COLOR_BELOW_0 };
   }
+  if (temp_f > 100) {
+    return (GColor){ .argb = TEMP_COLOR_SCORCHING };
+  }
+  return (GColor){ .argb = s_temp_lut[temp_f] };
 }
 
 static GColor get_condition_color(const char *condition) {
   // Clear/Sunny
   if (strstr(condition, "CLEAR")) {
-    return GColorYellow;
+    return (GColor){ .argb = WEATHER_COLOR_CLEAR };
   }
   // Thunderstorm
   if (strstr(condition, "THNDR") || strstr(condition, "STORM")) {
-    return GColorPurple;
+    return (GColor){ .argb = WEATHER_COLOR_THUNDER };
   }
   // Snow
   if (strstr(condition, "SNOW") || strstr(condition, "SNW")) {
-    return GColorWhite;
+    return (GColor){ .argb = WEATHER_COLOR_SNOW };
   }
   // Freezing precipitation
   if (strstr(condition, "FRZ")) {
-    return GColorCyan;
+    return (GColor){ .argb = WEATHER_COLOR_FREEZING };
   }
   // Rain/Showers/Drizzle
   if (strstr(condition, "RAIN") || strstr(condition, "SHOWER") || strstr(condition, "DRIZZLE")) {
-    return GColorPictonBlue;
+    return (GColor){ .argb = WEATHER_COLOR_RAIN };
   }
   // Fog
   if (strstr(condition, "FOG")) {
-    return GColorDarkGray;
+    return (GColor){ .argb = WEATHER_COLOR_FOG };
   }
   // Cloudy/Overcast
   if (strstr(condition, "CLOUD") || strstr(condition, "OVERCAST")) {
-    return GColorLightGray;
+    return (GColor){ .argb = WEATHER_COLOR_CLOUD };
   }
   // Default
   return color_fg;
@@ -632,10 +725,30 @@ static void update_weather_layers() {
 
       #if defined(PBL_PLATFORM_EMERY)
       // Recompute cached colors for new weather data
-      s_effective_temp_color = settings.colorize_temperature ?
-        get_temperature_color(s_cached_temp_f) : color_fg;
-      s_effective_condition_color = settings.colorize_weather ?
-        get_condition_color(settings.condition) : color_fg;
+      switch (settings.temperature_color_mode) {
+        case COLOR_MODE_DISABLED:
+          s_effective_temp_color = color_fg;
+          break;
+        case COLOR_MODE_STATIC:
+          s_effective_temp_color = settings.temperature_static_color;
+          break;
+        case COLOR_MODE_DYNAMIC:
+        default:
+          s_effective_temp_color = get_temperature_color(s_cached_temp_f);
+          break;
+      }
+      switch (settings.weather_color_mode) {
+        case COLOR_MODE_DISABLED:
+          s_effective_condition_color = color_fg;
+          break;
+        case COLOR_MODE_STATIC:
+          s_effective_condition_color = settings.weather_static_color;
+          break;
+        case COLOR_MODE_DYNAMIC:
+        default:
+          s_effective_condition_color = get_condition_color(settings.condition);
+          break;
+      }
       text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
       text_layer_set_text_color(s_condition_layer, s_effective_condition_color);
       #endif
@@ -676,35 +789,26 @@ static void update_weather_layers() {
   }
 }
 
-// Progress bar color lookup table (10% intervals)
-// Index 0 = 0-9%, Index 1 = 10-19%, ..., Index 9 = 90-99%
-#if defined(PBL_PLATFORM_EMERY)
-static const GColor s_progress_colors[] = {
-  { .argb = GColorDarkCandyAppleRedARGB8 },  // 0-9%:   Deep red
-  { .argb = GColorRedARGB8 },                 // 10-19%: Red
-  { .argb = GColorFollyARGB8 },               // 20-29%: Orange-red
-  { .argb = GColorOrangeARGB8 },              // 30-39%: Orange
-  { .argb = GColorChromeYellowARGB8 },        // 40-49%: Yellow-orange
-  { .argb = GColorYellowARGB8 },              // 50-59%: Yellow
-  { .argb = GColorSpringBudARGB8 },           // 60-69%: Yellow-green
-  { .argb = GColorGreenARGB8 },               // 70-79%: Green
-  { .argb = GColorBrightGreenARGB8 },         // 80-89%: Bright green
-  { .argb = GColorBrightGreenARGB8 },         // 90-99%: Bright green
-};
-#endif
 
 static GColor get_progress_bar_color(int percent) {
   #if defined(PBL_PLATFORM_EMERY)
-    if (!settings.colorize_progress) {
-      return color_fg;
+    switch (settings.progress_color_mode) {
+      case COLOR_MODE_DISABLED:
+        return color_fg;
+      case COLOR_MODE_STATIC:
+        return settings.progress_static_color;
+      case COLOR_MODE_DYNAMIC:
+      default: {
+        // O(1) lookup using compile-time LUT
+        if (percent <= 0) {
+          return (GColor){ .argb = PROGRESS_COLOR_0 };
+        }
+        if (percent >= 100) {
+          return (GColor){ .argb = PROGRESS_COLOR_100 };
+        }
+        return (GColor){ .argb = s_progress_lut[percent] };
+      }
     }
-    if (percent >= 100) {
-      return GColorVividCerulean;  // Full: celebration color (bright blue)
-    }
-    int index = percent / 10;
-    if (index < 0) index = 0;
-    if (index > 9) index = 9;
-    return s_progress_colors[index];
   #else
     return color_fg;
   #endif
@@ -715,16 +819,44 @@ static GColor get_progress_bar_color(int percent) {
 static void cache_effective_colors() {
   s_effective_colon_color = settings.colorize_colon ? settings.colon_color : color_fg;
   s_effective_date_color = settings.colorize_date ? settings.date_color : color_fg;
-  s_effective_temp_color = settings.colorize_temperature ?
-    get_temperature_color(s_cached_temp_f) : color_fg;
-  s_effective_condition_color = settings.colorize_weather ?
-    get_condition_color(settings.condition) : color_fg;
+
+  // Temperature color based on mode
+  switch (settings.temperature_color_mode) {
+    case COLOR_MODE_DISABLED:
+      s_effective_temp_color = color_fg;
+      break;
+    case COLOR_MODE_STATIC:
+      s_effective_temp_color = settings.temperature_static_color;
+      break;
+    case COLOR_MODE_DYNAMIC:
+    default:
+      s_effective_temp_color = get_temperature_color(s_cached_temp_f);
+      break;
+  }
+
+  // Weather condition color based on mode
+  switch (settings.weather_color_mode) {
+    case COLOR_MODE_DISABLED:
+      s_effective_condition_color = color_fg;
+      break;
+    case COLOR_MODE_STATIC:
+      s_effective_condition_color = settings.weather_static_color;
+      break;
+    case COLOR_MODE_DYNAMIC:
+    default:
+      s_effective_condition_color = get_condition_color(settings.condition);
+      break;
+  }
 }
 
 static void update_accent_colors() {
   cache_effective_colors();
   text_layer_set_text_color(s_time_colon_layer, s_effective_colon_color);
   text_layer_set_text_color(s_date_layer, s_effective_date_color);
+  text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
+  text_layer_set_text_color(s_condition_layer, s_effective_condition_color);
+  // Mark progress layer dirty to redraw with new color
+  layer_mark_dirty(s_progress_layer);
 }
 #endif
 
@@ -1063,9 +1195,12 @@ static void default_settings() {
   settings.progress_bar_mode = PROGRESS_MODE_SLEEP;
   settings.step_goal = DEFAULT_STEP_GOAL;
   settings.sleep_goal_mins = DEFAULT_SLEEP_GOAL_MINS;
-  settings.colorize_progress = true;
-  settings.colorize_temperature = true;
-  settings.colorize_weather = true;
+  settings.progress_color_mode = COLOR_MODE_DYNAMIC;
+  settings.progress_static_color = GColorWhite;
+  settings.temperature_color_mode = COLOR_MODE_DYNAMIC;
+  settings.temperature_static_color = GColorWhite;
+  settings.weather_color_mode = COLOR_MODE_DYNAMIC;
+  settings.weather_static_color = GColorWhite;
   settings.colorize_date = true;
   settings.colorize_colon = true;
   settings.bold_hours = true;
@@ -1178,20 +1313,36 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
     settings.sleep_goal_mins = atoi(sleep_goal_t->value->cstring);
   }
 
-  // Color settings
-  Tuple *colorize_progress_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_PROGRESS);
-  if (colorize_progress_t) {
-    settings.colorize_progress = colorize_progress_t->value->int32 == 1;
+  // Color mode settings (0=disabled, 1=static, 2=dynamic)
+  // Note: Clay sends select values as strings, so use atoi()
+  Tuple *progress_color_mode_t = dict_find(it, MESSAGE_KEY_PREF_PROGRESS_COLOR_MODE);
+  if (progress_color_mode_t) {
+    settings.progress_color_mode = atoi(progress_color_mode_t->value->cstring);
   }
 
-  Tuple *colorize_temperature_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_TEMPERATURE);
-  if (colorize_temperature_t) {
-    settings.colorize_temperature = colorize_temperature_t->value->int32 == 1;
+  Tuple *progress_static_color_t = dict_find(it, MESSAGE_KEY_PREF_PROGRESS_STATIC_COLOR);
+  if (progress_static_color_t) {
+    settings.progress_static_color = GColorFromHEX(progress_static_color_t->value->int32);
   }
 
-  Tuple *colorize_weather_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_WEATHER);
-  if (colorize_weather_t) {
-    settings.colorize_weather = colorize_weather_t->value->int32 == 1;
+  Tuple *temperature_color_mode_t = dict_find(it, MESSAGE_KEY_PREF_TEMPERATURE_COLOR_MODE);
+  if (temperature_color_mode_t) {
+    settings.temperature_color_mode = atoi(temperature_color_mode_t->value->cstring);
+  }
+
+  Tuple *temperature_static_color_t = dict_find(it, MESSAGE_KEY_PREF_TEMPERATURE_STATIC_COLOR);
+  if (temperature_static_color_t) {
+    settings.temperature_static_color = GColorFromHEX(temperature_static_color_t->value->int32);
+  }
+
+  Tuple *weather_color_mode_t = dict_find(it, MESSAGE_KEY_PREF_WEATHER_COLOR_MODE);
+  if (weather_color_mode_t) {
+    settings.weather_color_mode = atoi(weather_color_mode_t->value->cstring);
+  }
+
+  Tuple *weather_static_color_t = dict_find(it, MESSAGE_KEY_PREF_WEATHER_STATIC_COLOR);
+  if (weather_static_color_t) {
+    settings.weather_static_color = GColorFromHEX(weather_static_color_t->value->int32);
   }
 
   Tuple *colorize_date_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_DATE);

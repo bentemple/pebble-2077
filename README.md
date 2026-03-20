@@ -20,5 +20,8 @@ Forked from [moddedBear/pebble-2077](https://github.com/moddedBear/pebble-2077) 
     - Show how many hours you have been awake
 - Hourly vibration alert
 - Bluetooth disconnect alert
+- Customizable hour:minute bold or not
+- Customizable color for time separator (:) color and Date field
+- Optional dynamic coloring for temperature, weather, and progress bar (value based coloring)
 
 All features are configurable from the Pebble app using Clay for a completely offline configuration.

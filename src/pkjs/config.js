@@ -28,22 +28,58 @@ const config = [
                 "defaultValue": "Colors"
             },
             {
-                "type": "toggle",
-                "messageKey": "PREF_COLORIZE_PROGRESS",
-                "label": "Colorize progress bar",
-                "defaultValue": true
+                "type": "select",
+                "messageKey": "PREF_PROGRESS_COLOR_MODE",
+                "label": "Progress bar color",
+                "defaultValue": "2",
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
             },
             {
-                "type": "toggle",
-                "messageKey": "PREF_COLORIZE_TEMPERATURE",
-                "label": "Colorize temperature",
-                "defaultValue": true
+                "type": "color",
+                "messageKey": "PREF_PROGRESS_STATIC_COLOR",
+                "label": "Progress bar static color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
             },
             {
-                "type": "toggle",
-                "messageKey": "PREF_COLORIZE_WEATHER",
-                "label": "Colorize weather condition",
-                "defaultValue": true
+                "type": "select",
+                "messageKey": "PREF_TEMPERATURE_COLOR_MODE",
+                "label": "Temperature color",
+                "defaultValue": "2",
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_TEMPERATURE_STATIC_COLOR",
+                "label": "Temperature static color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
+            },
+            {
+                "type": "select",
+                "messageKey": "PREF_WEATHER_COLOR_MODE",
+                "label": "Weather color",
+                "defaultValue": "2",
+                "options": [
+                    { "value": "0", "label": "Disabled" },
+                    { "value": "1", "label": "Static" },
+                    { "value": "2", "label": "Dynamic" }
+                ]
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_WEATHER_STATIC_COLOR",
+                "label": "Weather static color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
             },
             {
                 "type": "toggle",
