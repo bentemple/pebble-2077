@@ -715,7 +715,7 @@ static GColor get_condition_color(const char *condition) {
 #endif
 
 static void update_weather_layers() {
-  if (settings.show_weather && settings.temperature) {
+  if (settings.show_weather && settings.temperature != -999) {
     static char temperature_buffer[8];
     static char conditions_buffer[32];
     #if defined(PBL_PLATFORM_EMERY)
@@ -1282,7 +1282,8 @@ static void default_settings() {
   settings.skip_location = false;
   settings.hour_vibe = false;
   settings.disconnect_alert = true;
-  settings.temperature = (int)NULL;
+  settings.temperature = -999;  // Sentinel: no weather data yet
+  settings.temperature_high = -999;  // Sentinel: no weather data yet
   settings.progress_bar_mode = PROGRESS_MODE_SLEEP;
   settings.step_goal = DEFAULT_STEP_GOAL;
   settings.sleep_goal_mins = DEFAULT_SLEEP_GOAL_MINS;

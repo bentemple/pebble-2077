@@ -115,18 +115,24 @@ function fetchWeatherWithCoords(lat, lon) {
 }
 
 function getWeather() {
+    console.log('getWeather called, skipLocation=' + settings.skipLocation)
     if (settings.skipLocation) {
         // Use 0,0 - Gadgetbridge or similar will intercept
+        console.log('Using 0,0 coordinates')
         fetchWeatherWithCoords(0, 0)
     } else {
         // Try to get real location
+        console.log('Requesting geolocation...')
         navigator.geolocation.getCurrentPosition(
             (pos) => {
+                console.log('Got location: ' + pos.coords.latitude + ',' + pos.coords.longitude)
                 fetchWeatherWithCoords(pos.coords.latitude, pos.coords.longitude)
             },
             (err) => {
                 console.log('Geolocation failed: ' + err.message)
-                // Don't fetch weather if location fails
+                // Fallback to 0,0 if location fails
+                console.log('Falling back to 0,0')
+                fetchWeatherWithCoords(0, 0)
             },
             { timeout: 15000, maximumAge: 60000 }
         )
