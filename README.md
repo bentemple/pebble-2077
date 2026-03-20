@@ -1,11 +1,12 @@
 # 2077
 ![Watch face screenshot](2077.png)
+![Watch face Pebble Time 2 screenshot](2077-emery.png)
 
 A futuristic Pebble watch face inspired by Cyberpunk 2077.
+Forked from [moddedBear/pebble-2077](https://github.com/moddedBear/pebble-2077) to add Pebble Time 2 support + a bunch of other features
 
 ## Download
-- [Pebble app store](https://apps.rebble.io/en_US/application/6917ca9d966c150009f9bfaa)
-- [GitHub releases](https://github.com/moddedBear/pebble-2077/releases/latest)
+- [GitHub releases](https://github.com/bentemple/pebble-2077/releases/latest)
 
 ## Features
 - Battery bar
