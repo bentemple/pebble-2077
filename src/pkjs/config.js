@@ -21,6 +21,66 @@ const config = [
     },
     {
         "type": "section",
+        "capabilities": ["COLOR"],
+        "items": [
+            {
+                "type": "heading",
+                "defaultValue": "Colors"
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_PROGRESS",
+                "label": "Colorize progress bar",
+                "defaultValue": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_TEMPERATURE",
+                "label": "Colorize temperature",
+                "defaultValue": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_WEATHER",
+                "label": "Colorize weather condition",
+                "defaultValue": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_DATE",
+                "label": "Colorize date",
+                "defaultValue": true
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_DATE_COLOR",
+                "label": "Date color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_COLORIZE_COLON",
+                "label": "Colorize colon",
+                "defaultValue": true
+            },
+            {
+                "type": "color",
+                "messageKey": "PREF_COLON_COLOR",
+                "label": "Colon color",
+                "defaultValue": "0xFFFFFF",
+                "sunlight": true
+            },
+            {
+                "type": "toggle",
+                "messageKey": "PREF_BOLD_HOURS",
+                "label": "Bold hours",
+                "defaultValue": true
+            }
+        ]
+    },
+    {
+        "type": "section",
         "items": [
             {
                 "type": "heading",

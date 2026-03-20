@@ -9,18 +9,41 @@
   #define SCREEN_WIDTH 200
   #define SCREEN_HEIGHT 228
   #define MARGIN_SIZE 7
+  #define TIME_X_OFFSET -4  // Less margin for time display
   #define HUD_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
   #define HUD_HEIGHT 40
   #define TEXT_HEIGHT 20
   #define TIME_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
   #define TIME_LAYER_HEIGHT 86
+  // Digit widths for Rajdhani-Medium 86pt (measure if font changes)
+  #define DIGIT_WIDTH_0 46
+  #define DIGIT_WIDTH_1 32
+  #define DIGIT_WIDTH_2 44
+  #define DIGIT_WIDTH_3 44
+  #define DIGIT_WIDTH_4 44
+  #define DIGIT_WIDTH_5 44
+  #define DIGIT_WIDTH_6 44
+  #define DIGIT_WIDTH_7 44
+  #define DIGIT_WIDTH_8 44
+  #define DIGIT_WIDTH_9 44
+  #define COLON_WIDTH 16
+  #define KERNING_ADJUST -4
+
+  // Compile-time hour width calculation
+  #define HOUR_WIDTH(tens, ones) (DIGIT_WIDTH_##tens + DIGIT_WIDTH_##ones + KERNING_ADJUST)
+
+  // Split time layer positions for accent coloring (HH : MM)
+  #define TIME_HOURS_WIDTH 95
+  #define TIME_COLON_WIDTH 25
+  #define TIME_MINS_WIDTH 95
+  #define TIME_MINS_WIDTH 95
   #define DATE_LAYER_SIZE 36
   #define PROGRESS_BAR_OFFSET_X 43
   #define PROGRESS_BAR_OFFSET_Y 13
   #define PROGRESS_BAR_WIDTH (HUD_WIDTH - PROGRESS_BAR_OFFSET_X)
   #define PROGRESS_BAR_HEIGHT 8
   #define DAY_LAYER_OFFSET_X 43
-  #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT)
+  #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT + 3)
   #define DAY_LAYER_WIDTH (HUD_WIDTH - DAY_LAYER_OFFSET_X)
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
 #else
@@ -53,10 +76,19 @@ const int DEFAULT_SLEEP_GOAL_MINS = 420;  // 7 hours
 static Window *s_main_window;
 
 static GFont s_time_font;
+#if defined(PBL_PLATFORM_EMERY)
+static GFont s_time_font_bold;
+static GFont s_time_font_regular;
+#endif
 static GFont s_date_font;
 static GFont s_text_font;
 
 static TextLayer *s_time_layer;
+#if defined(PBL_PLATFORM_EMERY)
+static TextLayer *s_time_hours_layer;
+static TextLayer *s_time_colon_layer;
+static TextLayer *s_time_mins_layer;
+#endif
 static TextLayer *s_date_layer;
 static TextLayer *s_day_layer;
 static TextLayer *s_custom_layer;
@@ -109,6 +141,18 @@ static bool s_needs_sleep_tracking = false;  // uptime OR sleep progress mode
 // Cached settings that rarely change
 static bool s_is_24h_style = true;
 static int s_cached_temp_f = 0;  // Pre-calculated Fahrenheit
+static const char *s_time_format = "%H:%M";  // Cached format string
+
+#if defined(PBL_PLATFORM_EMERY)
+// Pre-computed effective colors (updated when settings change)
+static GColor s_effective_date_color;
+static GColor s_effective_colon_color;
+static GColor s_effective_temp_color;
+static GColor s_effective_condition_color;
+// Cached layer origins (never change after layout)
+static int s_hours_layer_x = 0;
+static int s_hours_layer_y = 0;
+#endif
 
 // Cached state for change detection (reduces unnecessary redraws)
 static int s_last_progress_percent = -1;
@@ -121,6 +165,24 @@ static bool s_last_steps_visible = false;
 
 // Cached formatted strings (avoid reformatting when unchanged)
 static char s_time_buffer[8];
+#if defined(PBL_PLATFORM_EMERY)
+static char s_time_hours_buffer[4];
+static char s_time_mins_buffer[4];
+// Compile-time colon X offsets based on hour digit widths
+static const int16_t s_colon_offsets_24h[24] = {
+  HOUR_WIDTH(0,0), HOUR_WIDTH(0,1), HOUR_WIDTH(0,2), HOUR_WIDTH(0,3), HOUR_WIDTH(0,4),
+  HOUR_WIDTH(0,5), HOUR_WIDTH(0,6), HOUR_WIDTH(0,7), HOUR_WIDTH(0,8), HOUR_WIDTH(0,9),
+  HOUR_WIDTH(1,0), HOUR_WIDTH(1,1), HOUR_WIDTH(1,2), HOUR_WIDTH(1,3), HOUR_WIDTH(1,4),
+  HOUR_WIDTH(1,5), HOUR_WIDTH(1,6), HOUR_WIDTH(1,7), HOUR_WIDTH(1,8), HOUR_WIDTH(1,9),
+  HOUR_WIDTH(2,0), HOUR_WIDTH(2,1), HOUR_WIDTH(2,2), HOUR_WIDTH(2,3)
+};
+static const int16_t s_colon_offsets_12h[13] = {
+  0,  // unused
+  HOUR_WIDTH(0,1), HOUR_WIDTH(0,2), HOUR_WIDTH(0,3), HOUR_WIDTH(0,4), HOUR_WIDTH(0,5),
+  HOUR_WIDTH(0,6), HOUR_WIDTH(0,7), HOUR_WIDTH(0,8), HOUR_WIDTH(0,9), HOUR_WIDTH(1,0),
+  HOUR_WIDTH(1,1), HOUR_WIDTH(1,2)
+};
+#endif
 static char s_date_buffer[8];
 static char s_day_buffer[32];
 static char s_custom_buffer[32];
@@ -131,6 +193,10 @@ typedef struct ClaySettings {
   int progress_bar_mode;  // 0=battery, 1=steps, 2=sleep
   int step_goal;
   int sleep_goal_mins;
+  // Color options (Emery only)
+  bool colorize_progress, colorize_temperature, colorize_weather, colorize_date, colorize_colon;
+  bool bold_hours;
+  GColor date_color, colon_color;
   char custom_text[32], bottom_text[32], condition[32];
 } ClaySettings;
 
@@ -223,7 +289,7 @@ static void replace_uptime(char *buf, size_t buf_size, time_t now) {
   // Calculate uptime string
   char uptime_str[16];
 
-  if (s_wake_time > 0) {
+  if (s_wake_time > 0 && s_wake_time <= now) {
     int uptime_secs = now - s_wake_time;
     int uptime_hrs = uptime_secs / 3600;
     int uptime_mins = (uptime_secs % 3600) / 60;
@@ -290,8 +356,34 @@ static void update_time() {
   // Always update main time display every minute
   if (current_minute != s_last_minute) {
     s_last_minute = current_minute;
-    strftime(s_time_buffer, sizeof(s_time_buffer), s_is_24h_style ? "%H:%M" : "%I:%M", tick_time);
+    strftime(s_time_buffer, sizeof(s_time_buffer), s_time_format, tick_time);
+    #if defined(PBL_PLATFORM_EMERY)
+    // Split time for accent coloring: direct char copy (faster than strncpy)
+    s_time_hours_buffer[0] = s_time_buffer[0];
+    s_time_hours_buffer[1] = s_time_buffer[1];
+    s_time_hours_buffer[2] = '\0';
+    s_time_mins_buffer[0] = s_time_buffer[3];
+    s_time_mins_buffer[1] = s_time_buffer[4];
+    s_time_mins_buffer[2] = '\0';
+    text_layer_set_text(s_time_hours_layer, s_time_hours_buffer);
+    text_layer_set_text(s_time_mins_layer, s_time_mins_buffer);
+
+    // Reposition colon/minutes only when hour changes (uses compile-time lookup table)
+    if (current_hour != s_last_hour) {
+      s_last_hour = current_hour;
+
+      int hour_index = s_is_24h_style ? current_hour : (current_hour % 12 == 0 ? 12 : current_hour % 12);
+      int colon_x = s_is_24h_style ? s_colon_offsets_24h[hour_index] : s_colon_offsets_12h[hour_index];
+      int mins_x = colon_x + COLON_WIDTH;
+
+      layer_set_frame(text_layer_get_layer(s_time_colon_layer),
+        GRect(s_hours_layer_x + colon_x, s_hours_layer_y - 6, TIME_COLON_WIDTH, TIME_LAYER_HEIGHT));
+      layer_set_frame(text_layer_get_layer(s_time_mins_layer),
+        GRect(s_hours_layer_x + mins_x, s_hours_layer_y, TIME_MINS_WIDTH, TIME_LAYER_HEIGHT));
+    }
+    #else
     text_layer_set_text(s_time_layer, s_time_buffer);
+    #endif
   }
 
   // Update custom text based on its calculated period
@@ -337,36 +429,50 @@ static void init_wake_time() {
   HealthActivityMask activities = health_service_peek_current_activities();
   s_was_sleeping = activities & HealthActivitySleep;
 
-  // Check if cached wake time is still valid (<12 hours old)
-  if (s_wake_time > 0 && s_wake_time <= now && (now - s_wake_time) < 12 * 3600) {
+  // Check if cached wake time is still valid (in the past and <7 days old)
+  if (s_wake_time > 0 && s_wake_time <= now && (now - s_wake_time) < 7 * 24 * 3600) {
     return;  // Valid in-memory cache
   }
 
   // No valid cache - estimate from health data if awake
   if (!s_was_sleeping) {
-    time_t today_start = time_start_of_today();
     HealthMetric metric = HealthMetricSleepSeconds;
-    HealthServiceAccessibilityMask mask = health_service_metric_accessible(
-      metric, today_start, now
-    );
+    time_t today_start = time_start_of_today();
 
-    if (mask & HealthServiceAccessibilityMaskAvailable) {
-      int sleep_seconds = (int)health_service_sum_today(metric);
-      if (sleep_seconds > 0) {
-        // Estimate: woke up after sleeping this many seconds since midnight
-        s_wake_time = today_start + sleep_seconds;
-      } else {
-        // No sleep recorded - use app start time
-        s_wake_time = now;
+    // Look back up to 7 days to find the most recent wake time
+    for (int days_ago = 0; days_ago < 7; days_ago++) {
+      time_t day_start = today_start - (days_ago * 24 * 3600);
+      time_t day_end = day_start + 24 * 3600;
+      if (day_end > now) day_end = now;  // Don't query into the future
+
+      HealthServiceAccessibilityMask mask = health_service_metric_accessible(
+        metric, day_start, day_end
+      );
+
+      if (mask & HealthServiceAccessibilityMaskAvailable) {
+        int sleep_seconds = (int)health_service_sum(metric, day_start, day_end);
+        if (sleep_seconds > 0) {
+          // Found sleep on this day - wake time is day_start + sleep_seconds
+          time_t estimated_wake = day_start + sleep_seconds;
+          // Ensure wake time is in the past
+          if (estimated_wake <= now) {
+            s_wake_time = estimated_wake;
+            return;
+          }
+        }
       }
-    } else {
-      // Health not available - use app start time
-      s_wake_time = now;
     }
+
+    // No sleep found in last 7 days - use app start time
+    s_wake_time = now;
   }
   // If currently sleeping, s_wake_time stays 0 until we wake up
   #endif
 }
+
+#if defined(PBL_PLATFORM_EMERY)
+static void update_accent_colors();  // Forward declaration
+#endif
 
 static void update_progress() {
   int new_percent = 0;
@@ -454,6 +560,57 @@ static void update_steps() {
   #endif
 }
 
+#if defined(PBL_PLATFORM_EMERY)
+static GColor get_temperature_color(int temp_f) {
+  if (temp_f >= 90) {
+    return GColorRed;
+  } else if (temp_f >= 80) {
+    return GColorOrange;
+  } else if (temp_f >= 70) {
+    return GColorGreen;
+  } else if (temp_f >= 50) {
+    return GColorYellow;
+  } else if (temp_f >= 32) {
+    return GColorPictonBlue;
+  } else {
+    return GColorWhite;
+  }
+}
+
+static GColor get_condition_color(const char *condition) {
+  // Clear/Sunny
+  if (strstr(condition, "CLEAR")) {
+    return GColorYellow;
+  }
+  // Thunderstorm
+  if (strstr(condition, "THNDR") || strstr(condition, "STORM")) {
+    return GColorPurple;
+  }
+  // Snow
+  if (strstr(condition, "SNOW") || strstr(condition, "SNW")) {
+    return GColorWhite;
+  }
+  // Freezing precipitation
+  if (strstr(condition, "FRZ")) {
+    return GColorCyan;
+  }
+  // Rain/Showers/Drizzle
+  if (strstr(condition, "RAIN") || strstr(condition, "SHOWER") || strstr(condition, "DRIZZLE")) {
+    return GColorPictonBlue;
+  }
+  // Fog
+  if (strstr(condition, "FOG")) {
+    return GColorDarkGray;
+  }
+  // Cloudy/Overcast
+  if (strstr(condition, "CLOUD") || strstr(condition, "OVERCAST")) {
+    return GColorLightGray;
+  }
+  // Default
+  return color_fg;
+}
+#endif
+
 static void update_weather_layers() {
   if (settings.show_weather && settings.temperature) {
     static char temperature_buffer[8];
@@ -472,6 +629,16 @@ static void update_weather_layers() {
 
       text_layer_set_text(s_condition_layer, conditions_buffer);
       text_layer_set_text(s_temperature_layer, temperature_buffer);
+
+      #if defined(PBL_PLATFORM_EMERY)
+      // Recompute cached colors for new weather data
+      s_effective_temp_color = settings.colorize_temperature ?
+        get_temperature_color(s_cached_temp_f) : color_fg;
+      s_effective_condition_color = settings.colorize_weather ?
+        get_condition_color(settings.condition) : color_fg;
+      text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
+      text_layer_set_text_color(s_condition_layer, s_effective_condition_color);
+      #endif
     }
 
     // Only recalculate positions if step visibility changed
@@ -509,6 +676,58 @@ static void update_weather_layers() {
   }
 }
 
+// Progress bar color lookup table (10% intervals)
+// Index 0 = 0-9%, Index 1 = 10-19%, ..., Index 9 = 90-99%
+#if defined(PBL_PLATFORM_EMERY)
+static const GColor s_progress_colors[] = {
+  { .argb = GColorDarkCandyAppleRedARGB8 },  // 0-9%:   Deep red
+  { .argb = GColorRedARGB8 },                 // 10-19%: Red
+  { .argb = GColorFollyARGB8 },               // 20-29%: Orange-red
+  { .argb = GColorOrangeARGB8 },              // 30-39%: Orange
+  { .argb = GColorChromeYellowARGB8 },        // 40-49%: Yellow-orange
+  { .argb = GColorYellowARGB8 },              // 50-59%: Yellow
+  { .argb = GColorSpringBudARGB8 },           // 60-69%: Yellow-green
+  { .argb = GColorGreenARGB8 },               // 70-79%: Green
+  { .argb = GColorBrightGreenARGB8 },         // 80-89%: Bright green
+  { .argb = GColorBrightGreenARGB8 },         // 90-99%: Bright green
+};
+#endif
+
+static GColor get_progress_bar_color(int percent) {
+  #if defined(PBL_PLATFORM_EMERY)
+    if (!settings.colorize_progress) {
+      return color_fg;
+    }
+    if (percent >= 100) {
+      return GColorVividCerulean;  // Full: celebration color (bright blue)
+    }
+    int index = percent / 10;
+    if (index < 0) index = 0;
+    if (index > 9) index = 9;
+    return s_progress_colors[index];
+  #else
+    return color_fg;
+  #endif
+}
+
+#if defined(PBL_PLATFORM_EMERY)
+// Recompute effective colors from settings (call when settings change)
+static void cache_effective_colors() {
+  s_effective_colon_color = settings.colorize_colon ? settings.colon_color : color_fg;
+  s_effective_date_color = settings.colorize_date ? settings.date_color : color_fg;
+  s_effective_temp_color = settings.colorize_temperature ?
+    get_temperature_color(s_cached_temp_f) : color_fg;
+  s_effective_condition_color = settings.colorize_weather ?
+    get_condition_color(settings.condition) : color_fg;
+}
+
+static void update_accent_colors() {
+  cache_effective_colors();
+  text_layer_set_text_color(s_time_colon_layer, s_effective_colon_color);
+  text_layer_set_text_color(s_date_layer, s_effective_date_color);
+}
+#endif
+
 static void progress_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int width = (s_progress_percent * bounds.size.w) / 100;
@@ -518,13 +737,19 @@ static void progress_update_proc(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
   // draw the progress bar
-  graphics_context_set_fill_color(ctx, color_fg);
+  GColor bar_color = get_progress_bar_color(s_progress_percent);
+  graphics_context_set_fill_color(ctx, bar_color);
   graphics_fill_rect(ctx, GRect(0, 0, width, bounds.size.h), 0, GCornerNone);
 }
 
 static void load_fonts() {
   #if defined(PBL_PLATFORM_EMERY)
     s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86));
+    // Only load bold and regular fonts if bold setting is enabled
+    if (settings.bold_hours) {
+      s_time_font_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_SEMI_BOLD));
+      s_time_font_regular = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_REGULAR));
+    }
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_25));
     s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_17));
   #else
@@ -560,6 +785,37 @@ static void load_charge_layer(int x, int y) {
 }
 
 static void load_time_layer(int x, int y) {
+  #if defined(PBL_PLATFORM_EMERY)
+  // Cache position for hourly repositioning (never changes)
+  s_hours_layer_x = x;
+  s_hours_layer_y = y;
+
+  // Split time into hours, colon, minutes for accent coloring
+  s_time_hours_layer = text_layer_create(
+    GRect(x, y, TIME_HOURS_WIDTH, TIME_LAYER_HEIGHT)
+  );
+  text_layer_set_background_color(s_time_hours_layer, GColorClear);
+  text_layer_set_text_color(s_time_hours_layer, color_fg);
+  text_layer_set_font(s_time_hours_layer, settings.bold_hours ? s_time_font_bold : s_time_font);
+  text_layer_set_text_alignment(s_time_hours_layer, GTextAlignmentLeft);
+
+  s_time_colon_layer = text_layer_create(
+    GRect(x + HOUR_WIDTH(0,0), y - 6, TIME_COLON_WIDTH, TIME_LAYER_HEIGHT)
+  );
+  text_layer_set_background_color(s_time_colon_layer, GColorClear);
+  text_layer_set_text_color(s_time_colon_layer, color_fg);  // Will be updated by update_accent_colors
+  text_layer_set_font(s_time_colon_layer, s_time_font);
+  text_layer_set_text_alignment(s_time_colon_layer, GTextAlignmentLeft);
+  text_layer_set_text(s_time_colon_layer, ":");
+
+  s_time_mins_layer = text_layer_create(
+    GRect(x + HOUR_WIDTH(0,0) + COLON_WIDTH, y, TIME_MINS_WIDTH, TIME_LAYER_HEIGHT)
+  );
+  text_layer_set_background_color(s_time_mins_layer, GColorClear);
+  text_layer_set_text_color(s_time_mins_layer, color_fg);
+  text_layer_set_font(s_time_mins_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
+  text_layer_set_text_alignment(s_time_mins_layer, GTextAlignmentLeft);
+  #else
   s_time_layer = text_layer_create(
     GRect(x, y, TIME_LAYER_WIDTH, TIME_LAYER_HEIGHT)
   );
@@ -567,11 +823,12 @@ static void load_time_layer(int x, int y) {
   text_layer_set_text_color(s_time_layer, color_fg);
   text_layer_set_font(s_time_layer, s_time_font);
   text_layer_set_text_alignment(s_time_layer, GTextAlignmentLeft);
+  #endif
 }
 
 static void load_date_layer(int x, int y) {
   s_date_layer = text_layer_create(
-    GRect(x+4, y+4, DATE_LAYER_SIZE, DATE_LAYER_SIZE)
+    GRect(x+6, y+4, DATE_LAYER_SIZE, DATE_LAYER_SIZE)
   );
   text_layer_set_background_color(s_date_layer, GColorClear);
   text_layer_set_text_color(s_date_layer, color_fg);
@@ -630,7 +887,11 @@ static void main_window_load(Window *window) {
   int temperature_y = condition_y - TEXT_HEIGHT;
 
   load_hud(MARGIN_SIZE, hud_y);
+  #if defined(PBL_PLATFORM_EMERY)
+  load_time_layer(MARGIN_SIZE + TIME_X_OFFSET, time_y);
+  #else
   load_time_layer(MARGIN_SIZE, time_y);
+  #endif
 
   // custom text
   load_info_layer(&s_custom_layer, custom_y);
@@ -659,11 +920,24 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_step_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_condition_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
+  #if defined(PBL_PLATFORM_EMERY)
+  layer_add_child(window_layer, text_layer_get_layer(s_time_hours_layer));
+  layer_add_child(window_layer, text_layer_get_layer(s_time_colon_layer));
+  layer_add_child(window_layer, text_layer_get_layer(s_time_mins_layer));
+  update_accent_colors();
+  #else
   layer_add_child(window_layer, text_layer_get_layer(s_time_layer));
+  #endif
 }
 
 static void main_window_unload(Window *window) {
+  #if defined(PBL_PLATFORM_EMERY)
+  text_layer_destroy(s_time_hours_layer);
+  text_layer_destroy(s_time_colon_layer);
+  text_layer_destroy(s_time_mins_layer);
+  #else
   text_layer_destroy(s_time_layer);
+  #endif
   text_layer_destroy(s_date_layer);
   text_layer_destroy(s_day_layer);
   text_layer_destroy(s_custom_layer);
@@ -676,6 +950,14 @@ static void main_window_unload(Window *window) {
   gbitmap_destroy(s_charge_bitmap);
   bitmap_layer_destroy(s_charge_layer);
   fonts_unload_custom_font(s_time_font);
+  #if defined(PBL_PLATFORM_EMERY)
+  if (s_time_font_bold) {
+    fonts_unload_custom_font(s_time_font_bold);
+  }
+  if (s_time_font_regular) {
+    fonts_unload_custom_font(s_time_font_regular);
+  }
+  #endif
   fonts_unload_custom_font(s_date_font);
   fonts_unload_custom_font(s_text_font);
   layer_destroy(s_progress_layer);
@@ -781,15 +1063,29 @@ static void default_settings() {
   settings.progress_bar_mode = PROGRESS_MODE_SLEEP;
   settings.step_goal = DEFAULT_STEP_GOAL;
   settings.sleep_goal_mins = DEFAULT_SLEEP_GOAL_MINS;
+  settings.colorize_progress = true;
+  settings.colorize_temperature = true;
+  settings.colorize_weather = true;
+  settings.colorize_date = true;
+  settings.colorize_colon = true;
+  settings.bold_hours = true;
+  settings.date_color = GColorWhite;
+  settings.colon_color = GColorWhite;
   strncpy(settings.custom_text, "PBL_%m%U%j", sizeof(settings.custom_text));
   strncpy(settings.bottom_text, "%Y.%m.%d", sizeof(settings.bottom_text));
   strncpy(settings.condition, "", sizeof(settings.condition));
 }
 
+static void cache_derived_values() {
+  s_cached_temp_f = settings.temperature * 9 / 5 + 32;
+  s_is_24h_style = clock_is_24h_style();
+  s_time_format = s_is_24h_style ? "%H:%M" : "%I:%M";
+}
+
 static void load_settings() {
   default_settings();
   persist_read_data(SETTINGS_KEY, &settings, sizeof(settings));
-  s_cached_temp_f = settings.temperature * 9 / 5 + 32;  // Cache Fahrenheit
+  cache_derived_values();
   recalculate_update_periods();
 }
 
@@ -881,6 +1177,75 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
   if (sleep_goal_t) {
     settings.sleep_goal_mins = atoi(sleep_goal_t->value->cstring);
   }
+
+  // Color settings
+  Tuple *colorize_progress_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_PROGRESS);
+  if (colorize_progress_t) {
+    settings.colorize_progress = colorize_progress_t->value->int32 == 1;
+  }
+
+  Tuple *colorize_temperature_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_TEMPERATURE);
+  if (colorize_temperature_t) {
+    settings.colorize_temperature = colorize_temperature_t->value->int32 == 1;
+  }
+
+  Tuple *colorize_weather_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_WEATHER);
+  if (colorize_weather_t) {
+    settings.colorize_weather = colorize_weather_t->value->int32 == 1;
+  }
+
+  Tuple *colorize_date_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_DATE);
+  if (colorize_date_t) {
+    settings.colorize_date = colorize_date_t->value->int32 == 1;
+  }
+
+  Tuple *date_color_t = dict_find(it, MESSAGE_KEY_PREF_DATE_COLOR);
+  if (date_color_t) {
+    settings.date_color = GColorFromHEX(date_color_t->value->int32);
+  }
+
+  Tuple *colorize_colon_t = dict_find(it, MESSAGE_KEY_PREF_COLORIZE_COLON);
+  if (colorize_colon_t) {
+    settings.colorize_colon = colorize_colon_t->value->int32 == 1;
+  }
+
+  Tuple *colon_color_t = dict_find(it, MESSAGE_KEY_PREF_COLON_COLOR);
+  if (colon_color_t) {
+    settings.colon_color = GColorFromHEX(colon_color_t->value->int32);
+  }
+
+  #if defined(PBL_PLATFORM_EMERY)
+  Tuple *bold_hours_t = dict_find(it, MESSAGE_KEY_PREF_BOLD_HOURS);
+  if (bold_hours_t) {
+    bool new_bold = bold_hours_t->value->int32 == 1;
+    if (new_bold != settings.bold_hours) {
+      if (new_bold) {
+        // Load bold and regular fonts on demand
+        if (!s_time_font_bold) {
+          s_time_font_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_SEMI_BOLD));
+        }
+        if (!s_time_font_regular) {
+          s_time_font_regular = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_REGULAR));
+        }
+      } else {
+        // Unload bold and regular fonts to free memory
+        if (s_time_font_bold) {
+          fonts_unload_custom_font(s_time_font_bold);
+          s_time_font_bold = NULL;
+        }
+        if (s_time_font_regular) {
+          fonts_unload_custom_font(s_time_font_regular);
+          s_time_font_regular = NULL;
+        }
+      }
+      settings.bold_hours = new_bold;
+      text_layer_set_font(s_time_hours_layer, settings.bold_hours ? s_time_font_bold : s_time_font);
+      text_layer_set_font(s_time_mins_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
+    }
+  }
+
+  update_accent_colors();
+  #endif
 
   save_settings();
 }

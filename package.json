@@ -42,7 +42,15 @@
       "PREF_STEP_GOAL",
       "PREF_SLEEP_GOAL",
       "PREF_HOUR_VIBE",
-      "PREF_DISCONNECT_ALERT"
+      "PREF_DISCONNECT_ALERT",
+      "PREF_COLORIZE_PROGRESS",
+      "PREF_COLORIZE_TEMPERATURE",
+      "PREF_COLORIZE_WEATHER",
+      "PREF_COLORIZE_DATE",
+      "PREF_DATE_COLOR",
+      "PREF_COLORIZE_COLON",
+      "PREF_COLON_COLOR",
+      "PREF_BOLD_HOURS"
     ],
     "capabilities": [
       "configurable",
@@ -69,6 +77,20 @@
           "name": "FONT_RAJDHANI_86",
           "file": "fonts/Rajdhani-Medium.ttf",
           "characterRegex": "[0-9:]",
+          "targetPlatforms": ["emery"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_RAJDHANI_86_SEMI_BOLD",
+          "file": "fonts/Rajdhani-SemiBold.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": ["emery"]
+        },
+        {
+          "type": "font",
+          "name": "FONT_RAJDHANI_86_REGULAR",
+          "file": "fonts/Rajdhani-Regular.ttf",
+          "characterRegex": "[0-9]",
           "targetPlatforms": ["emery"]
         },
         {
