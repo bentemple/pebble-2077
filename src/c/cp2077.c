@@ -1566,6 +1566,18 @@ static void init() {
   // show the window on the watch
   window_stack_push(s_main_window, true);
 
+  // Invalidate all caches to force full initial draw
+  s_last_minute = -1;
+  s_last_hour = -1;
+  s_last_day = -1;
+  s_last_custom_update = -1;
+  s_last_bottom_update = -1;
+  s_last_progress_percent = -1;
+  s_last_step_count = -1;
+  s_last_temperature = -999;
+  s_last_temperature_high = -999;
+  s_last_steps_visible = false;
+
   update_time();
   update_steps();
   update_progress();
