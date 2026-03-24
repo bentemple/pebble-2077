@@ -96,7 +96,7 @@
           "type": "font",
           "name": "FONT_RAJDHANI_86_REGULAR",
           "file": "fonts/Rajdhani-Regular.ttf",
-          "characterRegex": "[0-9]",
+          "characterRegex": "[0-9:]",
           "targetPlatforms": ["emery"]
         },
         {

@@ -14,7 +14,7 @@
   #define SCREEN_WIDTH 200
   #define SCREEN_HEIGHT 228
   #define MARGIN_SIZE 7
-  #define TIME_X_OFFSET -4  // Less margin for time display
+  #define TIME_X_OFFSET 0  // Less margin for time display
   #define HUD_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
   #define HUD_HEIGHT 40
   #define TEXT_HEIGHT 20
@@ -23,7 +23,7 @@
 
   // Digit widths for Rajdhani-Medium 86pt (measure if font changes)
   #define DIGIT_WIDTH_0 46
-  #define DIGIT_WIDTH_1 32
+  #define DIGIT_WIDTH_1 31
   #define DIGIT_WIDTH_2 44
   #define DIGIT_WIDTH_3 44
   #define DIGIT_WIDTH_4 44
@@ -42,6 +42,10 @@
   #define TIME_HOURS_WIDTH 95
   #define TIME_COLON_WIDTH 25
   #define TIME_MINS_WIDTH 95
+  #define MINS_BOLD_X_OFFSET -8  // Move minutes closer to colon when using thinner regular font
+  #define COLON_Y_OFFSET -6       // Colon sits slightly higher than time digits
+  #define DATE_X_OFFSET 5
+  #define DATE_Y_OFFSET 4
   #define DATE_LAYER_SIZE 36
   #define PROGRESS_BAR_OFFSET_X 43
   #define PROGRESS_BAR_OFFSET_Y 13
@@ -53,9 +57,9 @@
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
 
   // Orbitron-SemiBold 17pt character widths (measure if font changes)
-  #define INFO_CHAR_WIDTH_F 10
+  #define INFO_CHAR_WIDTH_F 12
   #define INFO_CHAR_WIDTH_C 11
-  #define INFO_CHAR_WIDTH_SLASH 7
+  #define INFO_CHAR_WIDTH_SLASH 8
   #define INFO_CHAR_WIDTH_MINUS 8
   #define INFO_KERNING 1
   // Initial offsets for temperature layers (repositioned dynamically)
@@ -83,6 +87,8 @@
   #define DAY_LAYER_WIDTH 97
   #define DAY_LAYER_OFFSET_X 42
   #define DAY_LAYER_OFFSET_Y 24
+  #define DATE_X_OFFSET 5
+  #define DATE_Y_OFFSET 4
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
 #endif
 
@@ -125,7 +131,7 @@ typedef enum {
 // Orbitron 17pt digit widths for temperature positioning
 static const int s_info_digit_widths[10] = {
   12,  // 0
-  8,   // 1
+  9,   // 1
   11,  // 2
   11,  // 3
   12,  // 4

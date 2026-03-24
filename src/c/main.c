@@ -21,11 +21,13 @@ static Window *s_main_window;
 // ============================================================
 static void load_fonts(void) {
   #if defined(PBL_PLATFORM_EMERY)
-    s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86));
-    // Only load bold and regular fonts if bold setting is enabled
     if (settings.bold_hours) {
+      // Bold mode: load bold for hours, regular for colon and mins
       s_time_font_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_SEMI_BOLD));
       s_time_font_regular = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_REGULAR));
+    } else {
+      // Non-bold mode: load base font for all time elements
+      s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86));
     }
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_25));
     s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_17));
@@ -37,14 +39,18 @@ static void load_fonts(void) {
 }
 
 static void unload_fonts(void) {
-  fonts_unload_custom_font(s_time_font);
   #if defined(PBL_PLATFORM_EMERY)
+  if (s_time_font) {
+    fonts_unload_custom_font(s_time_font);
+  }
   if (s_time_font_bold) {
     fonts_unload_custom_font(s_time_font_bold);
   }
   if (s_time_font_regular) {
     fonts_unload_custom_font(s_time_font_regular);
   }
+  #else
+  fonts_unload_custom_font(s_time_font);
   #endif
   fonts_unload_custom_font(s_date_font);
   fonts_unload_custom_font(s_text_font);
@@ -245,15 +251,22 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
     bool new_bold = bold_hours_t->value->int32 == 1;
     if (new_bold != settings.bold_hours) {
       if (new_bold) {
-        // Load bold and regular fonts on demand
+        // Switching to bold: load bold/regular, unload base
         if (!s_time_font_bold) {
           s_time_font_bold = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_SEMI_BOLD));
         }
         if (!s_time_font_regular) {
           s_time_font_regular = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86_REGULAR));
         }
+        if (s_time_font) {
+          fonts_unload_custom_font(s_time_font);
+          s_time_font = NULL;
+        }
       } else {
-        // Unload bold and regular fonts to free memory
+        // Switching from bold: load base, unload bold/regular
+        if (!s_time_font) {
+          s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_86));
+        }
         if (s_time_font_bold) {
           fonts_unload_custom_font(s_time_font_bold);
           s_time_font_bold = NULL;
@@ -265,6 +278,7 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
       }
       settings.bold_hours = new_bold;
       text_layer_set_font(s_time_hours_layer, settings.bold_hours ? s_time_font_bold : s_time_font);
+      text_layer_set_font(s_time_colon_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
       text_layer_set_font(s_time_mins_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
     }
   }

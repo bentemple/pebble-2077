@@ -40,7 +40,9 @@ static void load_charge_layer(int x, int y) {
 }
 
 static void load_date_layer(int x, int y) {
-  s_date_layer = text_layer_create(GRect(x + 6, y + 4, DATE_LAYER_SIZE, DATE_LAYER_SIZE));
+  int date_x = x + DATE_X_OFFSET;
+  int date_y = y + DATE_Y_OFFSET;
+  s_date_layer = text_layer_create(GRect(date_x, date_y, DATE_LAYER_SIZE, DATE_LAYER_SIZE));
   text_layer_set_background_color(s_date_layer, GColorClear);
   text_layer_set_text_color(s_date_layer, color_fg);
   text_layer_set_font(s_date_layer, s_date_font);
