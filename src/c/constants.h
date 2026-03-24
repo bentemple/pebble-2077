@@ -2,6 +2,15 @@
 #include <pebble.h>
 
 // ============================================================
+// DEMO MODE
+// ============================================================
+// Set to 1 to enable demo mode with hard-coded values:
+// - Progress bar: 85%
+// - Current temp: 61F
+// - High temp: 85F
+#define DEMO_MODE 0
+
+// ============================================================
 // SETTINGS KEY
 // ============================================================
 #define SETTINGS_KEY 1
@@ -39,8 +48,8 @@
   #define HOUR_WIDTH(tens, ones) (DIGIT_WIDTH_##tens + DIGIT_WIDTH_##ones + KERNING_ADJUST)
 
   // Split time layer positions for accent coloring (HH : MM)
-  #define INITIAL_TIME_HOURS_WIDTH 90
-  #define INITIAL_TIME_MINS_WIDTH 90
+  #define INITIAL_TIME_HOURS_WIDTH 100
+  #define INITIAL_TIME_MINS_WIDTH 100
   #define MINS_BOLD_X_OFFSET -8  // Move minutes closer to colon when using thinner regular font
   #define COLON_Y_OFFSET -6       // Colon sits slightly higher than time digits
   #define DATE_X_OFFSET 5
@@ -129,16 +138,16 @@ typedef enum {
 
 // Orbitron-SemiBold 17pt digit widths (measured by tools/measure_font.py)
 static const int s_info_digit_widths[10] = {
-  14,  // 0
-  7,   // 1
-  14,  // 2
-  14,  // 3
-  12,  // 4
-  14,  // 5
-  14,  // 6
-  11,  // 7
-  14,  // 8
-  14   // 9
+  13,  // 0
+  6,   // 1
+  13,  // 2
+  13,  // 3
+  11,  // 4
+  13,  // 5
+  13,  // 6
+  10,  // 7
+  13,  // 8
+  13   // 9
 };
 
 // Progress bar color definitions
