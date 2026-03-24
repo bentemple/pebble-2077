@@ -55,23 +55,23 @@ void load_time_layer(int x, int y) {
   int colon_x = x + HOUR_WIDTH(0,0);
   int colon_y = y + COLON_Y_OFFSET;
   int mins_x_offset = settings.bold_hours ? MINS_BOLD_X_OFFSET : 0;
-  int mins_x = colon_x + TIME_COLON_WIDTH + mins_x_offset;
+  int mins_x = colon_x + COLON_WIDTH + mins_x_offset;
 
   // Split time into hours, colon, minutes for accent coloring
-  s_time_hours_layer = text_layer_create(GRect(x, y, TIME_HOURS_WIDTH, TIME_LAYER_HEIGHT));
+  s_time_hours_layer = text_layer_create(GRect(x, y, INITIAL_TIME_HOURS_WIDTH, TIME_LAYER_HEIGHT));
   text_layer_set_background_color(s_time_hours_layer, GColorClear);
   text_layer_set_text_color(s_time_hours_layer, color_fg);
   text_layer_set_font(s_time_hours_layer, settings.bold_hours ? s_time_font_bold : s_time_font);
   text_layer_set_text_alignment(s_time_hours_layer, GTextAlignmentLeft);
 
-  s_time_colon_layer = text_layer_create(GRect(colon_x, colon_y, TIME_COLON_WIDTH, TIME_LAYER_HEIGHT));
+  s_time_colon_layer = text_layer_create(GRect(colon_x, colon_y, COLON_WIDTH, TIME_LAYER_HEIGHT));
   text_layer_set_background_color(s_time_colon_layer, GColorClear);
   text_layer_set_text_color(s_time_colon_layer, color_fg);
   text_layer_set_font(s_time_colon_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
   text_layer_set_text_alignment(s_time_colon_layer, GTextAlignmentLeft);
   text_layer_set_text(s_time_colon_layer, ":");
 
-  s_time_mins_layer = text_layer_create(GRect(mins_x, y, TIME_MINS_WIDTH, TIME_LAYER_HEIGHT));
+  s_time_mins_layer = text_layer_create(GRect(mins_x, y, INITIAL_TIME_MINS_WIDTH, TIME_LAYER_HEIGHT));
   text_layer_set_background_color(s_time_mins_layer, GColorClear);
   text_layer_set_text_color(s_time_mins_layer, color_fg);
   text_layer_set_font(s_time_mins_layer, settings.bold_hours ? s_time_font_regular : s_time_font);
@@ -115,7 +115,8 @@ void update_time(void) {
     s_last_minute = current_minute;
     strftime(s_time_buffer, sizeof(s_time_buffer), s_time_format, tick_time);
     #if defined(PBL_PLATFORM_EMERY)
-    // Split time for accent coloring: direct char copy (faster than strncpy)
+    // Split time for accent coloring: direct char copy (faster than strncpy) 
+    // Also optionally could easily color hours/minutes separately
     s_time_hours_buffer[0] = s_time_buffer[0];
     s_time_hours_buffer[1] = s_time_buffer[1];
     s_time_hours_buffer[2] = '\0';
@@ -134,12 +135,12 @@ void update_time(void) {
       int colon_x = s_hours_layer_x + colon_x_offset;
       int colon_y = s_hours_layer_y + COLON_Y_OFFSET;
       int mins_x_offset = settings.bold_hours ? MINS_BOLD_X_OFFSET : 0;
-      int mins_x = colon_x + TIME_COLON_WIDTH + mins_x_offset;
+      int mins_x = colon_x + COLON_WIDTH + mins_x_offset;
 
       layer_set_frame(text_layer_get_layer(s_time_colon_layer),
-        GRect(colon_x, colon_y, TIME_COLON_WIDTH, TIME_LAYER_HEIGHT));
+        GRect(colon_x, colon_y, COLON_WIDTH, TIME_LAYER_HEIGHT));
       layer_set_frame(text_layer_get_layer(s_time_mins_layer),
-        GRect(mins_x, s_hours_layer_y, TIME_MINS_WIDTH, TIME_LAYER_HEIGHT));
+        GRect(mins_x, s_hours_layer_y, INITIAL_TIME_MINS_WIDTH, TIME_LAYER_HEIGHT));
     }
     #else
     text_layer_set_text(s_time_layer, s_time_buffer);

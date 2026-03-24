@@ -21,27 +21,26 @@
   #define TIME_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
   #define TIME_LAYER_HEIGHT 86
 
-  // Digit widths for Rajdhani-Medium 86pt (measure if font changes)
-  #define DIGIT_WIDTH_0 46
-  #define DIGIT_WIDTH_1 31
-  #define DIGIT_WIDTH_2 44
-  #define DIGIT_WIDTH_3 44
-  #define DIGIT_WIDTH_4 44
-  #define DIGIT_WIDTH_5 44
-  #define DIGIT_WIDTH_6 44
-  #define DIGIT_WIDTH_7 44
-  #define DIGIT_WIDTH_8 44
-  #define DIGIT_WIDTH_9 44
-  #define COLON_WIDTH 16
+  // Digit widths for Rajdhani-Medium 86pt (measured by tools/measure_font.py)
+  #define DIGIT_WIDTH_0 45
+  #define DIGIT_WIDTH_1 28
+  #define DIGIT_WIDTH_2 41
+  #define DIGIT_WIDTH_3 43
+  #define DIGIT_WIDTH_4 45
+  #define DIGIT_WIDTH_5 42
+  #define DIGIT_WIDTH_6 43
+  #define DIGIT_WIDTH_7 34
+  #define DIGIT_WIDTH_8 45
+  #define DIGIT_WIDTH_9 43
+  #define COLON_WIDTH 20
   #define KERNING_ADJUST -4
 
   // Compile-time hour width calculation
   #define HOUR_WIDTH(tens, ones) (DIGIT_WIDTH_##tens + DIGIT_WIDTH_##ones + KERNING_ADJUST)
 
   // Split time layer positions for accent coloring (HH : MM)
-  #define TIME_HOURS_WIDTH 95
-  #define TIME_COLON_WIDTH 25
-  #define TIME_MINS_WIDTH 95
+  #define INITIAL_TIME_HOURS_WIDTH 90
+  #define INITIAL_TIME_MINS_WIDTH 90
   #define MINS_BOLD_X_OFFSET -8  // Move minutes closer to colon when using thinner regular font
   #define COLON_Y_OFFSET -6       // Colon sits slightly higher than time digits
   #define DATE_X_OFFSET 5
@@ -56,11 +55,11 @@
   #define DAY_LAYER_WIDTH (HUD_WIDTH - DAY_LAYER_OFFSET_X)
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
 
-  // Orbitron-SemiBold 17pt character widths (measure if font changes)
+  // Orbitron-SemiBold 17pt character widths (measured by tools/measure_font.py)
   #define INFO_CHAR_WIDTH_F 12
-  #define INFO_CHAR_WIDTH_C 11
-  #define INFO_CHAR_WIDTH_SLASH 8
-  #define INFO_CHAR_WIDTH_MINUS 8
+  #define INFO_CHAR_WIDTH_C 14
+  #define INFO_CHAR_WIDTH_SLASH 9
+  #define INFO_CHAR_WIDTH_MINUS 9
   #define INFO_KERNING 1
   // Initial offsets for temperature layers (repositioned dynamically)
   #define TEMP_SLASH_OFFSET 40
@@ -128,18 +127,18 @@ typedef enum {
 // ============================================================
 #if defined(PBL_PLATFORM_EMERY)
 
-// Orbitron 17pt digit widths for temperature positioning
+// Orbitron-SemiBold 17pt digit widths (measured by tools/measure_font.py)
 static const int s_info_digit_widths[10] = {
-  12,  // 0
-  9,   // 1
-  11,  // 2
-  11,  // 3
+  14,  // 0
+  7,   // 1
+  14,  // 2
+  14,  // 3
   12,  // 4
-  11,  // 5
-  11,  // 6
+  14,  // 5
+  14,  // 6
   11,  // 7
-  11,  // 8
-  11   // 9
+  14,  // 8
+  14   // 9
 };
 
 // Progress bar color definitions
