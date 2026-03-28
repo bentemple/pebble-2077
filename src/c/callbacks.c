@@ -9,12 +9,24 @@
 #include "weather_layer.h"
 #include "hud_layer.h"
 #include "custom_text.h"
+#include "uptime.h"
 
 // ============================================================
 // WAKE TIME TRACKING
 // ============================================================
 bool s_was_sleeping = false;
 // s_wake_time is defined in custom_text.c
+
+// ============================================================
+// PEBBLE STORAGE WRAPPERS FOR UPTIME MODULE
+// ============================================================
+static int pebble_storage_read(uint32_t key, void *buffer, size_t size) {
+  return persist_read_data(key, buffer, size);
+}
+
+static int pebble_storage_write(uint32_t key, const void *data, size_t size) {
+  return persist_write_data(key, (const uint8_t *)data, size);
+}
 
 // ============================================================
 // TICK HANDLER
@@ -75,6 +87,60 @@ void bt_callback(bool connected) {
 }
 
 // ============================================================
+// PEBBLE HEALTH ITERATOR WRAPPER FOR UPTIME MODULE
+// ============================================================
+#if defined(PBL_HEALTH)
+
+// Context for bridging Pebble callback to uptime callback
+typedef struct {
+  UptimeSleepIteratorCB callback;
+  void *user_context;
+} PebbleIteratorBridge;
+
+// Pebble callback that bridges to uptime callback
+static bool pebble_sleep_callback(HealthActivity activity, time_t time_start,
+                                  time_t time_end, void *context) {
+  if (activity != HealthActivitySleep && activity != HealthActivityRestfulSleep) {
+    return true;  // Skip non-sleep activities
+  }
+
+  PebbleIteratorBridge *bridge = (PebbleIteratorBridge *)context;
+  return bridge->callback(time_start, time_end, bridge->user_context);
+}
+
+// Uptime iterator function that uses Pebble health API
+static void pebble_iterate_sleep(
+  time_t range_start,
+  time_t range_end,
+  bool backwards,
+  UptimeSleepIteratorCB callback,
+  void *context
+) {
+  HealthServiceAccessibilityMask mask = health_service_any_activity_accessible(
+    HealthActivitySleep, range_start, range_end
+  );
+
+  if (!(mask & HealthServiceAccessibilityMaskAvailable)) {
+    return;
+  }
+
+  PebbleIteratorBridge bridge = {
+    .callback = callback,
+    .user_context = context
+  };
+
+  health_service_activities_iterate(
+    HealthActivitySleep,
+    range_start,
+    range_end,
+    backwards ? HealthIterationDirectionPast : HealthIterationDirectionFuture,
+    pebble_sleep_callback,
+    &bridge
+  );
+}
+#endif
+
+// ============================================================
 // HEALTH HANDLER
 // ============================================================
 #if defined(PBL_HEALTH)
@@ -86,8 +152,17 @@ void health_handler(HealthEventType event, void *context) {
       bool is_sleeping = activities & HealthActivitySleep;
 
       if (s_was_sleeping && !is_sleeping) {
-        // Just woke up - record wake time
-        s_wake_time = time(NULL);
+        // Just woke up - classify the sleep and update cache
+        time_t now = time(NULL);
+        uptime_on_wake_event(now, pebble_iterate_sleep);
+
+        // Get the effective wake time (accounts for naps)
+        UptimeResult result = uptime_get_cached(now, pebble_iterate_sleep);
+        if (result.found_real_sleep) {
+          s_wake_time = uptime_get_effective_wake_time(&result);
+        } else {
+          s_wake_time = now;
+        }
 
         // Update sleep progress bar on wake
         if (settings.progress_bar_mode == PROGRESS_MODE_SLEEP) {
@@ -131,39 +206,22 @@ void init_wake_time(void) {
   HealthActivityMask activities = health_service_peek_current_activities();
   s_was_sleeping = activities & HealthActivitySleep;
 
-  // Check if cached wake time is still valid
-  if (s_wake_time > 0 && s_wake_time <= now && (now - s_wake_time) < 7 * 24 * 3600) {
+  // Initialize uptime module with Pebble storage
+  uptime_init(pebble_storage_read, pebble_storage_write);
+
+  // If currently sleeping, don't calculate yet
+  if (s_was_sleeping) {
     return;
   }
 
-  // No valid cache - estimate from health data if awake
-  if (!s_was_sleeping) {
-    HealthMetric metric = HealthMetricSleepSeconds;
-    time_t today_start = time_start_of_today();
+  // Force recalculation on app start to catch any missed wake events
+  // (e.g., app was closed during sleep and reopened after waking)
+  UptimeResult result = uptime_recalculate(now, pebble_iterate_sleep);
 
-    // Look back up to 7 days to find the most recent wake time
-    for (int days_ago = 0; days_ago < 7; days_ago++) {
-      time_t day_start = today_start - (days_ago * 24 * 3600);
-      time_t day_end = day_start + 24 * 3600;
-      if (day_end > now) day_end = now;
-
-      HealthServiceAccessibilityMask mask = health_service_metric_accessible(
-        metric, day_start, day_end
-      );
-
-      if (mask & HealthServiceAccessibilityMaskAvailable) {
-        int sleep_seconds = (int)health_service_sum(metric, day_start, day_end);
-        if (sleep_seconds > 0) {
-          time_t estimated_wake = day_start + sleep_seconds;
-          if (estimated_wake <= now) {
-            s_wake_time = estimated_wake;
-            return;
-          }
-        }
-      }
-    }
-
-    // No sleep found in last 7 days - use app start time
+  if (result.found_real_sleep) {
+    s_wake_time = uptime_get_effective_wake_time(&result);
+  } else {
+    // No real sleep found - use app start time
     s_wake_time = now;
   }
   #endif

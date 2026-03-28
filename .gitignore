@@ -2,3 +2,5 @@ build
 .lock-waf_linux_build
 node_modules
 package-lock.json
+
+*.o
