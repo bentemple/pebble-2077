@@ -210,7 +210,13 @@ void update_weather_layers(void) {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
     int current_hour = t->tm_hour;
-    bool use_tomorrow = (current_hour >= settings.sunset_hour);
+
+    // Use sunset_hour if available, otherwise default to 19:00 (7 PM)
+    int effective_sunset = (settings.sunset_hour >= 0) ? settings.sunset_hour : 19;
+
+    // Only switch to tomorrow's high if: past sunset AND tomorrow's data is available
+    bool use_tomorrow = (current_hour >= effective_sunset) &&
+                        (settings.temperature_high_tomorrow != -999);
     int effective_high = use_tomorrow ? settings.temperature_high_tomorrow : settings.temperature_high;
     int effective_high_f = effective_high * 9 / 5 + 32;
 

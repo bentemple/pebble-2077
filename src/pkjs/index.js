@@ -92,12 +92,31 @@ function fetchWeatherWithCoords(lat, lon) {
     xhrRequest(url, 'GET',
         (res) => {
             const data = JSON.parse(res)
+
+            // Current weather is the only critical part
+            if (!data.current_weather) {
+                console.log('No current weather data in response')
+                return
+            }
+
             const temp = Math.round(data.current_weather.temperature)
-            const tempHighToday = Math.round(data.daily.temperature_2m_max[0])
-            const tempHighTomorrow = Math.round(data.daily.temperature_2m_max[1])
-            const sunsetHour = new Date(data.daily.sunset[0]).getHours()
             const weather_code = parseInt(data.current_weather.weathercode)
             const conditions = getWeatherDescription(weather_code)
+
+            // Today's high - fallback to current temp if missing
+            const tempHighToday = (data.daily && data.daily.temperature_2m_max && data.daily.temperature_2m_max[0] != null)
+                ? Math.round(data.daily.temperature_2m_max[0])
+                : temp
+
+            // Tomorrow's high - use -999 sentinel if missing (will stay on today's high)
+            const tempHighTomorrow = (data.daily && data.daily.temperature_2m_max && data.daily.temperature_2m_max[1] != null)
+                ? Math.round(data.daily.temperature_2m_max[1])
+                : -999
+
+            // Sunset hour - use -1 sentinel if missing (C code will default to 19:00)
+            const sunsetHour = (data.daily && data.daily.sunset && data.daily.sunset[0])
+                ? new Date(data.daily.sunset[0]).getHours()
+                : -1
 
             const dictionary = {
                 'TEMPERATURE': temp,
