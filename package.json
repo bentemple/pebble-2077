@@ -1,7 +1,7 @@
 {
   "name": "2077",
-  "author": "Jeremy Payne",
-  "version": "1.0.0",
+  "author": "Jeremy Payne and Ben Temple",
+  "version": "2.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/moddedBear/pebble-2077.git"
@@ -143,6 +143,18 @@
           "type": "bitmap",
           "name": "IMAGE_CHARGE",
           "file": "images/charge.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LOW_BATTERY",
+          "file": "images/low_battery.png",
+          "targetPlatforms": ["aplite", "basalt", "diorite"]
+        },
+        {
+          "type": "bitmap",
+          "name": "IMAGE_LOW_BATTERY",
+          "file": "images/low_battery_emery.png",
+          "targetPlatforms": ["emery"]
         }
       ]
     }

@@ -44,6 +44,11 @@ void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
     update_progress();
   }
 
+  // Update battery progress every minute while charging
+  if (s_is_charging) {
+    update_progress();
+  }
+
   // Refresh weather every hour
   if (tick_time->tm_min == 0 && settings.show_weather) {
     // Re-evaluate which high to display (may switch at sunset)
@@ -64,13 +69,27 @@ void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 // BATTERY CALLBACK
 // ============================================================
 void battery_callback(BatteryChargeState state) {
+  bool was_charging = s_is_charging;
+  s_is_charging = state.is_plugged;
+
+  // Invalidate progress cache when charging state changes so the bar
+  // immediately reflects the correct value (battery % vs user mode)
+  if (s_is_charging != was_charging) {
+    s_last_progress_percent = -1;
+  }
+
   // Show/hide charging indicator
   show_charge_indicator(state.is_plugged);
 
-  // Update progress bar if in battery mode
-  if (settings.progress_bar_mode == PROGRESS_MODE_BATTERY) {
-    update_progress();
-  }
+  // Show low battery icon when below 10% and not charging
+  #if DEMO_MODE
+  show_low_battery_indicator(true);
+  #else
+  show_low_battery_indicator(!state.is_plugged && state.charge_percent < 10);
+  #endif
+
+  // Update progress bar (respects charging override in update_progress)
+  update_progress();
 }
 
 // ============================================================

@@ -76,37 +76,42 @@ void unload_progress_layer(void) {
 void update_progress(void) {
   int new_percent = 0;
 
-  switch (settings.progress_bar_mode) {
-    case PROGRESS_MODE_BATTERY:
-      new_percent = battery_state_service_peek().charge_percent;
-      break;
+  // When charging, always show battery level regardless of mode
+  if (s_is_charging) {
+    new_percent = battery_state_service_peek().charge_percent;
+  } else {
+    switch (settings.progress_bar_mode) {
+      case PROGRESS_MODE_BATTERY:
+        new_percent = battery_state_service_peek().charge_percent;
+        break;
 
-    case PROGRESS_MODE_STEPS:
-      #if defined(PBL_HEALTH)
-      {
-        // Use cached step count from update_steps()
-        int goal = settings.step_goal > 0 ? settings.step_goal : DEFAULT_STEP_GOAL;
-        new_percent = (s_last_step_count * 100) / goal;
-      }
-      #endif
-      break;
-
-    case PROGRESS_MODE_SLEEP:
-    default:
-      #if defined(PBL_HEALTH)
-      {
-        HealthMetric metric = HealthMetricSleepSeconds;
-        time_t start = time_start_of_today();
-        time_t end = time(NULL);
-        HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
-        if (mask & HealthServiceAccessibilityMaskAvailable) {
-          int sleep_seconds = (int)health_service_sum_today(metric);
-          int goal_seconds = settings.sleep_goal_mins > 0 ? settings.sleep_goal_mins * 60 : DEFAULT_SLEEP_GOAL_MINS * 60;
-          new_percent = (sleep_seconds * 100) / goal_seconds;
+      case PROGRESS_MODE_STEPS:
+        #if defined(PBL_HEALTH)
+        {
+          // Use cached step count from update_steps()
+          int goal = settings.step_goal > 0 ? settings.step_goal : DEFAULT_STEP_GOAL;
+          new_percent = (s_last_step_count * 100) / goal;
         }
-      }
-      #endif
-      break;
+        #endif
+        break;
+
+      case PROGRESS_MODE_SLEEP:
+      default:
+        #if defined(PBL_HEALTH)
+        {
+          HealthMetric metric = HealthMetricSleepSeconds;
+          time_t start = time_start_of_today();
+          time_t end = time(NULL);
+          HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
+          if (mask & HealthServiceAccessibilityMaskAvailable) {
+            int sleep_seconds = (int)health_service_sum_today(metric);
+            int goal_seconds = settings.sleep_goal_mins > 0 ? settings.sleep_goal_mins * 60 : DEFAULT_SLEEP_GOAL_MINS * 60;
+            new_percent = (sleep_seconds * 100) / goal_seconds;
+          }
+        }
+        #endif
+        break;
+    }
   }
 
   if (new_percent > 100) {

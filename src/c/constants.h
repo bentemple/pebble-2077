@@ -8,6 +8,7 @@
 // - Progress bar: 85%
 // - Current temp: 61F
 // - High temp: 85F
+// - Show low battery indicator: ON
 #define DEMO_MODE 0
 
 // ============================================================

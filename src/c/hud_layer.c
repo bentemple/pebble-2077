@@ -11,6 +11,8 @@ BitmapLayer *s_hud_layer;
 GBitmap *s_hud_bitmap;
 BitmapLayer *s_charge_layer;
 GBitmap *s_charge_bitmap;
+BitmapLayer *s_low_battery_layer;
+GBitmap *s_low_battery_bitmap;
 TextLayer *s_date_layer;
 TextLayer *s_day_layer;
 
@@ -39,6 +41,15 @@ static void load_charge_layer(int x, int y) {
   bitmap_layer_set_compositing_mode(s_charge_layer, GCompOpSet);
 }
 
+static void load_low_battery_layer(int x, int y) {
+  s_low_battery_bitmap = gbitmap_create_with_resource(RESOURCE_ID_IMAGE_LOW_BATTERY);
+  s_low_battery_layer = bitmap_layer_create(GRect(x + PROGRESS_BAR_OFFSET_X, y + PROGRESS_BAR_OFFSET_Y, 14, 8));
+  bitmap_layer_set_bitmap(s_low_battery_layer, s_low_battery_bitmap);
+  bitmap_layer_set_alignment(s_low_battery_layer, GAlignTopLeft);
+  bitmap_layer_set_compositing_mode(s_low_battery_layer, GCompOpSet);
+  layer_set_hidden(bitmap_layer_get_layer(s_low_battery_layer), true);
+}
+
 static void load_date_layer(int x, int y) {
   int date_x = x + DATE_X_OFFSET;
   int date_y = y + DATE_Y_OFFSET;
@@ -63,6 +74,7 @@ static void load_day_layer(int x, int y) {
 void load_hud(int x, int y) {
   load_hud_layer(x, y);
   load_charge_layer(x, y);
+  load_low_battery_layer(x, y);
   load_date_layer(x, y);
   load_day_layer(x, y);
 }
@@ -74,6 +86,8 @@ void unload_hud(void) {
   bitmap_layer_destroy(s_hud_layer);
   gbitmap_destroy(s_charge_bitmap);
   bitmap_layer_destroy(s_charge_layer);
+  gbitmap_destroy(s_low_battery_bitmap);
+  bitmap_layer_destroy(s_low_battery_layer);
 }
 
 void update_date(struct tm *tick_time) {
@@ -87,4 +101,8 @@ void update_date(struct tm *tick_time) {
 
 void show_charge_indicator(bool show) {
   layer_set_hidden(bitmap_layer_get_layer(s_charge_layer), !show);
+}
+
+void show_low_battery_indicator(bool show) {
+  layer_set_hidden(bitmap_layer_get_layer(s_low_battery_layer), !show);
 }

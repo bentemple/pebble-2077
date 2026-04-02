@@ -31,6 +31,11 @@ extern GColor s_effective_progress_color;
 #endif
 
 // ============================================================
+// CHARGING STATE
+// ============================================================
+extern bool s_is_charging;
+
+// ============================================================
 // CACHE INVALIDATION FLAGS
 // ============================================================
 extern int s_last_progress_percent;

@@ -341,6 +341,7 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, s_progress_layer);
   layer_add_child(window_layer, bitmap_layer_get_layer(s_hud_layer));
   layer_add_child(window_layer, bitmap_layer_get_layer(s_charge_layer));
+  layer_add_child(window_layer, bitmap_layer_get_layer(s_low_battery_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_date_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_day_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_custom_layer));

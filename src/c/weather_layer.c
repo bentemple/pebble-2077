@@ -138,6 +138,16 @@ void unload_weather_layers(void) {
 // UPDATE WEATHER LAYERS
 // ============================================================
 void update_weather_layers(void) {
+  #if DEMO_MODE
+  // Hard-code demo weather: 61F / 85F high, clear skies
+  settings.show_weather = true;
+  settings.temperature = 16;          // ~61F
+  settings.temperature_high = 29;     // ~85F
+  settings.weather_use_metric = false;
+  s_cached_temp_f = 61;
+  strncpy(settings.condition, "CLEAR", sizeof(settings.condition));
+  #endif
+
   if (settings.show_weather && settings.temperature != -999) {
     static char temperature_buffer[8];
     static char conditions_buffer[32];

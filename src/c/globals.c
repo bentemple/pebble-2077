@@ -31,6 +31,11 @@ GColor s_effective_progress_color = { .argb = GColorWhiteARGB8 };
 #endif
 
 // ============================================================
+// CHARGING STATE
+// ============================================================
+bool s_is_charging = false;
+
+// ============================================================
 // CACHE INVALIDATION FLAGS
 // ============================================================
 int s_last_progress_percent = -1;

@@ -6,6 +6,8 @@ extern BitmapLayer *s_hud_layer;
 extern GBitmap *s_hud_bitmap;
 extern BitmapLayer *s_charge_layer;
 extern GBitmap *s_charge_bitmap;
+extern BitmapLayer *s_low_battery_layer;
+extern GBitmap *s_low_battery_bitmap;
 extern TextLayer *s_date_layer;
 extern TextLayer *s_day_layer;
 
@@ -19,3 +21,4 @@ void unload_hud(void);
 void update_date(struct tm *tick_time);
 void update_day_text(struct tm *tick_time, time_t now);
 void show_charge_indicator(bool show);
+void show_low_battery_indicator(bool show);
