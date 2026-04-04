@@ -3,6 +3,8 @@
 #include "settings.h"
 #include "globals.h"
 #include "progress_layer.h"
+#include "uptime.h"
+#include "callbacks.h"
 
 // ============================================================
 // LAYER AND STATE
@@ -99,12 +101,13 @@ void update_progress(void) {
       default:
         #if defined(PBL_HEALTH)
         {
-          HealthMetric metric = HealthMetricSleepSeconds;
-          time_t start = time_start_of_today();
-          time_t end = time(NULL);
-          HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
-          if (mask & HealthServiceAccessibilityMaskAvailable) {
-            int sleep_seconds = (int)health_service_sum_today(metric);
+          // Use uptime module to get accurate sleep duration
+          // This avoids double-counting issues with health_service_sum_today
+          time_t now = time(NULL);
+          UptimeResult result = uptime_get_cached(now, pebble_iterate_sleep);
+          if (result.found_real_sleep) {
+            // Total sleep = main sleep + naps
+            int sleep_seconds = result.last_real_sleep_secs + result.total_nap_secs;
             int goal_seconds = settings.sleep_goal_mins > 0 ? settings.sleep_goal_mins * 60 : DEFAULT_SLEEP_GOAL_MINS * 60;
             new_percent = (sleep_seconds * 100) / goal_seconds;
           }

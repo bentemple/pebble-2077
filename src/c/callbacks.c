@@ -128,7 +128,7 @@ static bool pebble_sleep_callback(HealthActivity activity, time_t time_start,
 }
 
 // Uptime iterator function that uses Pebble health API
-static void pebble_iterate_sleep(
+void pebble_iterate_sleep(
   time_t range_start,
   time_t range_end,
   bool backwards,

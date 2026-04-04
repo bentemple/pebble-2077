@@ -88,6 +88,7 @@ typedef void (*UptimeIterateSleepFn)(
 // ============================================================
 typedef struct {
   time_t last_real_sleep_end;  // When user woke from real sleep
+  int last_real_sleep_secs;    // Duration of last real sleep (for progress bar)
   int total_nap_secs;          // Nap time to subtract from uptime
   bool found_real_sleep;       // True if we found qualifying real sleep
   int blocks_processed;        // Debug: how many blocks we looked at

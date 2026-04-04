@@ -151,6 +151,7 @@ UptimeResult uptime_calculate(
 ) {
   UptimeResult result = {
     .last_real_sleep_end = 0,
+    .last_real_sleep_secs = 0,
     .total_nap_secs = 0,
     .found_real_sleep = false,
     .blocks_processed = 0
@@ -231,6 +232,7 @@ UptimeResult uptime_calculate(
     } else {
       // This is real sleep - we're done
       result.last_real_sleep_end = block->end;
+      result.last_real_sleep_secs = (int)(block->end - block->start);
       result.found_real_sleep = true;
       break;
     }
@@ -307,6 +309,7 @@ static bool restore_cache_at(time_t reference_time) {
   // Restore to cache
   // Set calculated_at to reference_time - we trust the stored wake time is valid
   s_cache.result.last_real_sleep_end = data.last_real_sleep_end;
+  s_cache.result.last_real_sleep_secs = 0;  // Needs recalculation
   s_cache.result.total_nap_secs = 0;  // Naps need recalculation
   s_cache.result.found_real_sleep = true;
   s_cache.result.blocks_processed = 0;
@@ -394,8 +397,10 @@ UptimeResult uptime_recalculate(
 void uptime_record_wake(time_t wake_time) {
   // Direct update without API call - used when health event fires
   // wake_time is when the user woke, but we record "now" as calculation time
+  // Note: sleep duration unknown in this path, will be 0 until recalculated
   time_t now = time(NULL);
   s_cache.result.last_real_sleep_end = wake_time;
+  s_cache.result.last_real_sleep_secs = 0;  // Unknown - needs recalculation
   s_cache.result.total_nap_secs = 0;
   s_cache.result.found_real_sleep = true;
   s_cache.result.blocks_processed = 0;
@@ -408,6 +413,7 @@ void uptime_record_wake(time_t wake_time) {
 // Version with explicit time for testing
 void uptime_record_wake_at(time_t wake_time, time_t now) {
   s_cache.result.last_real_sleep_end = wake_time;
+  s_cache.result.last_real_sleep_secs = 0;  // Unknown - needs recalculation
   s_cache.result.total_nap_secs = 0;
   s_cache.result.found_real_sleep = true;
   s_cache.result.blocks_processed = 0;
@@ -489,10 +495,11 @@ void uptime_on_wake_event(
     int nap_duration = block.end - block.start;
     s_cache.result.total_nap_secs += nap_duration;
     s_cache.calculated_at = now;
-    // Don't update last_real_sleep_end - it stays the same
+    // Don't update last_real_sleep_end or last_real_sleep_secs - they stay the same
   } else {
     // It's real sleep - update wake time, reset naps
     s_cache.result.last_real_sleep_end = block.end;
+    s_cache.result.last_real_sleep_secs = (int)(block.end - block.start);
     s_cache.result.total_nap_secs = 0;
     s_cache.result.found_real_sleep = true;
     s_cache.calculated_at = now;

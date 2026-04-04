@@ -795,6 +795,106 @@ TEST(app_restart_with_nap_since_last_run) {
 }
 
 // ============================================================
+// SLEEP DURATION TESTS (for progress bar)
+// ============================================================
+
+/*
+ * Verify last_real_sleep_secs tracks sleep duration correctly
+ * YESTERDAY 23:00 ════════════ TODAY 07:00 (8hr sleep)
+ */
+TEST(sleep_duration_basic) {
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));  // 8hr sleep
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(8, 0), mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);  // 8 hours
+}
+
+/*
+ * Sleep duration with naps - total for progress should be sleep + naps
+ * YESTERDAY 23:00 ════════ TODAY 07:00 ──── 14:00 ═ 15:00 ── 16:00^
+ *              8hr sleep          7hr       1hr nap
+ *
+ * Total sleep for progress = 8hr + 1hr = 9hr
+ */
+TEST(sleep_duration_with_nap) {
+  MockSleepData data = {0};
+  add_sleep(&data, TODAY(14, 0), TODAY(15, 0));     // 1hr nap
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));  // 8hr sleep
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(16, 0), mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);      // Main sleep: 8hr
+  ASSERT_EQ(r.total_nap_secs, 1 * 3600);            // Nap: 1hr
+  // Total for progress bar: 8hr + 1hr = 9hr
+  int total_sleep = r.last_real_sleep_secs + r.total_nap_secs;
+  ASSERT_EQ(total_sleep, 9 * 3600);
+}
+
+/*
+ * Wake event nap adds to sleep duration for progress bar
+ * YESTERDAY 23:00 ════════ TODAY 07:00 ──── 14:00 ═ 15:00 ── 15:30^ (wake event)
+ *              8hr sleep          7hr       1hr nap
+ *
+ * After wake event from nap: total sleep = 8hr + 1hr = 9hr
+ */
+TEST(sleep_duration_wake_event_nap) {
+  mock_storage_written = false;
+  uptime_init_at(mock_storage_read, mock_storage_write, TODAY(7, 30));
+  uptime_invalidate_cache();
+
+  // Establish real sleep baseline (8hr)
+  {
+    MockSleepData data = {0};
+    add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+    g_mock_data = &data;
+    UptimeResult r = uptime_recalculate(TODAY(7, 30), mock_iterate_sleep);
+    ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);  // 8hr main sleep
+    ASSERT_EQ(r.total_nap_secs, 0);
+  }
+
+  // Wake from 1hr nap at 15:30
+  {
+    MockSleepData data = {0};
+    add_sleep(&data, TODAY(14, 0), TODAY(15, 0));  // 1hr nap
+    g_mock_data = &data;
+    uptime_on_wake_event(TODAY(15, 30), mock_iterate_sleep);
+  }
+
+  // Verify nap was added to total
+  UptimeResult r = uptime_get_cached(TODAY(15, 30), mock_iterate_sleep);
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);   // Main sleep unchanged
+  ASSERT_EQ(r.total_nap_secs, 1 * 3600);         // 1hr nap added
+  // Total for progress bar: 8hr + 1hr = 9hr
+  int total_sleep = r.last_real_sleep_secs + r.total_nap_secs;
+  ASSERT_EQ(total_sleep, 9 * 3600);
+}
+
+/*
+ * Fragmented night sleep should merge - duration is total merged block
+ * 23:00 ═ 00:00 ── 01:30 ═ 02:30 ── 04:00 ═ 05:00 ── 06:30 ═ 07:30 ── 08:00^
+ *   1hr     1.5hr    1hr     1.5hr    1hr     1.5hr    1hr       30m
+ *
+ * Merged: 23:00-07:30 = 8.5hr sleep
+ */
+TEST(sleep_duration_merged) {
+  MockSleepData data = {0};
+  add_sleep(&data, TODAY(6, 30), TODAY(7, 30));     // 1hr
+  add_sleep(&data, TODAY(4, 0), TODAY(5, 0));       // 1hr
+  add_sleep(&data, TODAY(1, 30), TODAY(2, 30));     // 1hr
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(0, 0));  // 1hr
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(8, 0), mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  // Merged block: 23:00 to 07:30 = 8.5hr
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600 + 30 * 60);
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 int main(void) {
@@ -834,6 +934,12 @@ int main(void) {
   printf("\n--- APP RESTART TESTS ---\n");
   RUN_TEST(app_restart_catches_missed_wake);
   RUN_TEST(app_restart_with_nap_since_last_run);
+
+  printf("\n--- SLEEP DURATION TESTS ---\n");
+  RUN_TEST(sleep_duration_basic);
+  RUN_TEST(sleep_duration_with_nap);
+  RUN_TEST(sleep_duration_wake_event_nap);
+  RUN_TEST(sleep_duration_merged);
 
   printf("\n==============================================\n");
   printf("  Results: %d/%d tests passed\n", tests_passed, tests_run);
