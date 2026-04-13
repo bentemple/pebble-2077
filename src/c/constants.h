@@ -56,9 +56,9 @@
   #define DATE_X_OFFSET 5
   #define DATE_Y_OFFSET 4
   #define DATE_LAYER_SIZE 36
-  #define PROGRESS_BAR_OFFSET_X 43
+  #define PROGRESS_BAR_OFFSET_X 42  // Offset within HUD image where bar starts (screen x = MARGIN_SIZE + 42)
   #define PROGRESS_BAR_OFFSET_Y 13
-  #define PROGRESS_BAR_WIDTH (HUD_WIDTH - PROGRESS_BAR_OFFSET_X)
+  #define PROGRESS_BAR_WIDTH (181 - PROGRESS_BAR_OFFSET_X)  // Bar ends at px 181
   #define PROGRESS_BAR_HEIGHT 8
   #define DAY_LAYER_OFFSET_X 43
   #define DAY_LAYER_OFFSET_Y (HUD_HEIGHT - TEXT_HEIGHT + 3)
@@ -89,10 +89,10 @@
   #define TIME_LAYER_WIDTH 136
   #define TIME_LAYER_HEIGHT 58
   #define DATE_LAYER_SIZE 36
-  #define PROGRESS_BAR_WIDTH 96
-  #define PROGRESS_BAR_HEIGHT 8
-  #define PROGRESS_BAR_OFFSET_X 43
+  #define PROGRESS_BAR_OFFSET_X 42  // Offset within HUD image where bar starts (screen x = MARGIN_SIZE + 42)
   #define PROGRESS_BAR_OFFSET_Y 13
+  #define PROGRESS_BAR_WIDTH (139 - PROGRESS_BAR_OFFSET_X)  // Bar ends at px 139
+  #define PROGRESS_BAR_HEIGHT 8
   #define DAY_LAYER_WIDTH 97
   #define DAY_LAYER_OFFSET_X 42
   #define DAY_LAYER_OFFSET_Y 24
