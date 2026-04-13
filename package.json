@@ -76,68 +76,96 @@
           "name": "FONT_RAJDHANI_58",
           "file": "fonts/Rajdhani-Regular.ttf",
           "characterRegex": "[0-9:]",
-          "targetPlatforms": ["aplite", "basalt", "diorite"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_RAJDHANI_86",
           "file": "fonts/Rajdhani-Medium.ttf",
           "characterRegex": "[0-9:]",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_RAJDHANI_86_SEMI_BOLD",
           "file": "fonts/Rajdhani-SemiBold.ttf",
           "characterRegex": "[0-9]",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_RAJDHANI_86_REGULAR",
           "file": "fonts/Rajdhani-Regular.ttf",
           "characterRegex": "[0-9:]",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_RAJDHANI_24",
           "file": "fonts/Rajdhani-Regular.ttf",
           "characterRegex": "[0-9]",
-          "targetPlatforms": ["aplite", "basalt", "diorite"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_RAJDHANI_25",
           "file": "fonts/Rajdhani-Medium.ttf",
           "characterRegex": "[0-9]",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_ORBITRON_12",
           "file": "fonts/Orbitron-Regular.ttf",
           "characterRegex": "[ -~]",
-          "targetPlatforms": ["aplite", "basalt", "diorite"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+          ]
         },
         {
           "type": "font",
           "name": "FONT_ORBITRON_17",
           "file": "fonts/Orbitron-SemiBold.ttf",
           "characterRegex": "[ -~]",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "bitmap",
           "name": "IMAGE_HUD",
           "file": "images/hud.png",
-          "targetPlatforms": ["aplite", "basalt", "diorite"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+          ]
         },
         {
           "type": "bitmap",
           "name": "IMAGE_HUD",
           "file": "images/hud_emery.png",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         },
         {
           "type": "bitmap",
@@ -148,13 +176,19 @@
           "type": "bitmap",
           "name": "IMAGE_LOW_BATTERY",
           "file": "images/low_battery.png",
-          "targetPlatforms": ["aplite", "basalt", "diorite"]
+          "targetPlatforms": [
+            "aplite",
+            "basalt",
+            "diorite"
+          ]
         },
         {
           "type": "bitmap",
           "name": "IMAGE_LOW_BATTERY",
           "file": "images/low_battery_emery.png",
-          "targetPlatforms": ["emery"]
+          "targetPlatforms": [
+            "emery"
+          ]
         }
       ]
     }
