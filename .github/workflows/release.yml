@@ -21,7 +21,7 @@ jobs:
             --user root \
             ghcr.io/skylord123/docker-coredevices-pebble-tool:latest
           sudo chown -R $USER build/
-          mv build/pebble.pbw build/pebble-timer.pbw
+          mv build/pebble.pbw build/${{ github.event.repository.name }}.pbw
 
       - name: Create draft release
         uses: softprops/action-gh-release@v2
@@ -29,4 +29,4 @@ jobs:
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: build/pebble-timer.pbw
+          files: build/${{ github.event.repository.name }}.pbw
