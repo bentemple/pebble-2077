@@ -164,7 +164,7 @@ void pebble_iterate_sleep(
 // ============================================================
 #if defined(PBL_HEALTH)
 void health_handler(HealthEventType event, void *context) {
-  if (event == HealthEventSignificantUpdate) {
+  if (event == HealthEventSignificantUpdate || event == HealthEventSleepUpdate) {
     // Check for sleep -> awake transition
     if (s_needs_sleep_tracking) {
       HealthActivityMask activities = health_service_peek_current_activities();
@@ -190,10 +190,8 @@ void health_handler(HealthEventType event, void *context) {
       }
       s_was_sleeping = is_sleeping;
     }
-
-    update_steps();
   }
-  if (event == HealthEventMovementUpdate) {
+  if (event == HealthEventSignificantUpdate || event == HealthEventMovementUpdate) {
     update_steps();
   }
 }
