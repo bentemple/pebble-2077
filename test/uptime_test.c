@@ -325,6 +325,41 @@ TEST(fragmented_night_sleep) {
   ASSERT_EQ(r.last_real_sleep_end, TODAY(7, 30));
   ASSERT_EQ(r.total_nap_secs, 0);
   ASSERT_EQ(get_uptime_mins(TODAY(8, 0), &r), 30);
+  // Actual sleep = 4 x 1hr = 4hr, NOT the 8.5hr merged span
+  ASSERT_EQ(r.last_real_sleep_secs, 4 * 3600);
+}
+
+// ============================================================
+// TEST 7d: Fragmented sleep excludes awake gaps from duration
+// ============================================================
+/*
+ * 4x1hr sleep blocks with 1hr awake gaps between each.
+ * All gaps < 2hr merge threshold → merges into one block (23:00-06:00 = 7hr span).
+ * last_real_sleep_secs must reflect actual sleep (4hr), not the merged span (7hr).
+ *
+ * YESTERDAY 23:00 ═ 00:00 ─ 01:00 ═ 02:00 ─ 03:00 ═ 04:00 ─ 05:00 ═ 06:00 ─── 10:00^
+ *                1hr  awake  1hr  awake  1hr  awake  1hr          4hr uptime
+ *
+ * At 10:00^:
+ *   last_real_sleep_secs = 4hr  (not 7hr)
+ *   uptime = 4hr
+ */
+TEST(fragmented_sleep_excludes_awake_gaps) {
+  MockSleepData data = {0};
+  // Most recent first (as health iterator returns them)
+  add_sleep(&data, TODAY(5, 0), TODAY(6, 0));
+  add_sleep(&data, TODAY(3, 0), TODAY(4, 0));
+  add_sleep(&data, TODAY(1, 0), TODAY(2, 0));
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(0, 0));
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(10, 0), mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(6, 0));
+  ASSERT_EQ(r.total_nap_secs, 0);
+  // Actual sleep = 4hr, not the 7hr span
+  ASSERT_EQ(r.last_real_sleep_secs, 4 * 3600);
+  ASSERT_EQ(get_uptime_mins(TODAY(10, 0), &r), 4 * 60);
 }
 
 // ============================================================
@@ -795,6 +830,106 @@ TEST(app_restart_with_nap_since_last_run) {
 }
 
 // ============================================================
+// FIRST MINUTE AWAKE TESTS
+// ============================================================
+
+/*
+ * After sleeping overnight, uptime at exactly 1 minute is 1 minute.
+ * Nap detection must not interfere — there is no sleep block after waking.
+ *
+ * YESTERDAY 23:00 ════════════ TODAY 07:00 ─ 07:01^
+ *              8hr sleep                    1min
+ *
+ * At 07:01^: uptime = 0:01
+ */
+TEST(wake_1_minute_shows_awake) {
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(7, 0) + 60, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(r.total_nap_secs, 0);
+  ASSERT_EQ(get_uptime_mins(TODAY(7, 0) + 60, &r), 1);
+}
+
+/*
+ * After sleeping only a few hours during night hours, 1 minute awake = 1 minute
+ * uptime. The short sleep (3hr) must not be mistaken for a nap — it falls during
+ * night hours so is always real sleep.
+ *
+ * TODAY 02:00 ════════════ TODAY 05:00 ─ 05:01^
+ *          3hr night sleep            1min
+ *
+ * At 05:01^: uptime = 0:01
+ */
+TEST(short_night_sleep_1_minute_awake) {
+  MockSleepData data = {0};
+  add_sleep(&data, TODAY(2, 0), TODAY(5, 0));  // 3hr, night hours (2am-5am)
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(5, 0) + 60, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(5, 0));
+  ASSERT_EQ(r.total_nap_secs, 0);
+  ASSERT_EQ(get_uptime_mins(TODAY(5, 0) + 60, &r), 1);
+}
+
+/*
+ * Fragmented night sleep (merged into one block), then 1 minute awake.
+ * Even though there were brief wakeups during the night, the merged block
+ * ends at the last session end, and uptime is 1 minute after that.
+ *
+ * YESTERDAY 23:00 ═ 00:00 ── 00:30 ═ 06:00 ─ 06:01^
+ *               1hr   gap     5.5hr           1min
+ *         (gap < 2hr → merges into one block ending at 06:00)
+ *
+ * At 06:01^: uptime = 0:01
+ */
+TEST(fragmented_night_sleep_1_minute_awake) {
+  MockSleepData data = {0};
+  add_sleep(&data, TODAY(0, 30), TODAY(6, 0));       // 5.5hr
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(0, 0));   // 1hr
+  g_mock_data = &data;
+
+  // Both blocks merge (gap = 30min < 2hr), merged end = TODAY(6, 0)
+  UptimeResult r = uptime_calculate(TODAY(6, 0) + 60, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(6, 0));
+  ASSERT_EQ(r.total_nap_secs, 0);
+  ASSERT_EQ(get_uptime_mins(TODAY(6, 0) + 60, &r), 1);
+}
+
+/*
+ * Going back to sleep shortly after waking (within 1 minute) merges the sessions.
+ * The user's point: even if they go back to sleep, the FIRST minute awake still
+ * counted — it's just that a subsequent sleep joins the block.
+ *
+ * This test simulates the in-progress state: user woke at 07:00, check at 07:01.
+ * A future sleep at 07:05 would merge this back — but that doesn't affect the
+ * current reading.
+ *
+ * YESTERDAY 23:00 ════════════ TODAY 07:00 ─ 07:01^  [future: → 07:05 ══ 07:30]
+ *              8hr sleep                    1min        (if merges, end becomes 07:30)
+ *
+ * At 07:01^: uptime = 0:01 (regardless of what hasn't happened yet)
+ */
+TEST(first_minute_awake_before_possible_merge) {
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_calculate(TODAY(7, 0) + 60, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(get_uptime_mins(TODAY(7, 0) + 60, &r), 1);
+
+  // Verify: nap logic hasn't eaten any awake time
+  // (total_nap_secs == 0 since there's no sleep block after 07:00 yet)
+  ASSERT_EQ(r.total_nap_secs, 0);
+}
+
+// ============================================================
 // SLEEP DURATION TESTS (for progress bar)
 // ============================================================
 
@@ -874,11 +1009,12 @@ TEST(sleep_duration_wake_event_nap) {
 }
 
 /*
- * Fragmented night sleep should merge - duration is total merged block
+ * Fragmented night sleep: 4x1hr blocks with 1.5hr gaps (all < 2hr merge threshold).
  * 23:00 ═ 00:00 ── 01:30 ═ 02:30 ── 04:00 ═ 05:00 ── 06:30 ═ 07:30 ── 08:00^
  *   1hr     1.5hr    1hr     1.5hr    1hr     1.5hr    1hr       30m
  *
- * Merged: 23:00-07:30 = 8.5hr sleep
+ * All gaps < 2hr → merges into one block (23:00-07:30 span).
+ * Actual sleep = 4 x 1hr = 4hr (awake gaps are NOT counted as sleep).
  */
 TEST(sleep_duration_merged) {
   MockSleepData data = {0};
@@ -890,8 +1026,8 @@ TEST(sleep_duration_merged) {
 
   UptimeResult r = uptime_calculate(TODAY(8, 0), mock_iterate_sleep);
   ASSERT_TRUE(r.found_real_sleep);
-  // Merged block: 23:00 to 07:30 = 8.5hr
-  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600 + 30 * 60);
+  // Actual sleep = 4hr (not the 8.5hr merged span)
+  ASSERT_EQ(r.last_real_sleep_secs, 4 * 3600);
 }
 
 // ============================================================
@@ -912,6 +1048,7 @@ int main(void) {
   RUN_TEST(multiple_naps);
   RUN_TEST(early_morning_nap);
   RUN_TEST(fragmented_night_sleep);
+  RUN_TEST(fragmented_sleep_excludes_awake_gaps);
   RUN_TEST(no_sleep_data);
   RUN_TEST(night_hour_detection);
   RUN_TEST(nap_exclusion_from_awake);
@@ -934,6 +1071,12 @@ int main(void) {
   printf("\n--- APP RESTART TESTS ---\n");
   RUN_TEST(app_restart_catches_missed_wake);
   RUN_TEST(app_restart_with_nap_since_last_run);
+
+  printf("\n--- FIRST MINUTE AWAKE TESTS ---\n");
+  RUN_TEST(wake_1_minute_shows_awake);
+  RUN_TEST(short_night_sleep_1_minute_awake);
+  RUN_TEST(fragmented_night_sleep_1_minute_awake);
+  RUN_TEST(first_minute_awake_before_possible_merge);
 
   printf("\n--- SLEEP DURATION TESTS ---\n");
   RUN_TEST(sleep_duration_basic);

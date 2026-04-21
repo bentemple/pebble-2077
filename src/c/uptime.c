@@ -49,7 +49,8 @@ bool uptime_is_night_hour(time_t t) {
 #endif
 
 bool uptime_is_nap(const UptimeSleepBlock *block, int awake_before) {
-  int duration = block->end - block->start;
+  // Use actual sleep time (not span) so merged blocks with gaps aren't mis-classified
+  int duration = block->actual_secs > 0 ? block->actual_secs : (int)(block->end - block->start);
 
   DEBUG_PRINT("    is_nap check: duration=%d, awake_before=%d\n", duration, awake_before);
 
@@ -107,6 +108,7 @@ int uptime_merge_sessions_to_blocks(
   // Start with first session
   time_t block_start = starts[0];
   time_t block_end = ends[0];
+  int block_actual_secs = (int)(ends[0] - starts[0]);
 
   for (int i = 1; i <= session_count; i++) {
     bool should_finalize = false;
@@ -116,8 +118,9 @@ int uptime_merge_sessions_to_blocks(
       int gap = block_start - ends[i];
 
       if (gap <= UPTIME_SLEEP_MERGE_GAP) {
-        // Merge: extend block backwards
+        // Merge: extend block backwards, accumulate only actual sleep (not the gap)
         block_start = starts[i];
+        block_actual_secs += (int)(ends[i] - starts[i]);
       } else {
         should_finalize = true;
       }
@@ -129,12 +132,14 @@ int uptime_merge_sessions_to_blocks(
     if (should_finalize && block_count < max_blocks) {
       blocks_out[block_count].start = block_start;
       blocks_out[block_count].end = block_end;
+      blocks_out[block_count].actual_secs = block_actual_secs;
       block_count++;
 
       // Start new block if there are more sessions
       if (i < session_count) {
         block_start = starts[i];
         block_end = ends[i];
+        block_actual_secs = (int)(ends[i] - starts[i]);
       }
     }
   }
@@ -232,7 +237,8 @@ UptimeResult uptime_calculate(
     } else {
       // This is real sleep - we're done
       result.last_real_sleep_end = block->end;
-      result.last_real_sleep_secs = (int)(block->end - block->start);
+      // Use actual_secs (not span) so fragmented-but-merged blocks report true sleep time
+      result.last_real_sleep_secs = block->actual_secs > 0 ? block->actual_secs : (int)(block->end - block->start);
       result.found_real_sleep = true;
       break;
     }
@@ -470,10 +476,11 @@ void uptime_on_wake_event(
     return;
   }
 
-  // Create a block for classification
+  // Create a block for classification (single session, so actual_secs == span)
   UptimeSleepBlock block = {
     .start = capture.start,
-    .end = capture.end
+    .end = capture.end,
+    .actual_secs = (int)(capture.end - capture.start)
   };
 
   // Calculate awake_before: time from last real sleep end to this sleep start

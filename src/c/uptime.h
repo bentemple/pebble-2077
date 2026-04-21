@@ -59,6 +59,7 @@
 typedef struct {
   time_t start;
   time_t end;
+  int actual_secs;  // Sum of individual session durations (excludes awake gaps within merged block)
 } UptimeSleepBlock;
 
 // ============================================================

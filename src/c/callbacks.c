@@ -16,6 +16,7 @@
 // ============================================================
 bool s_was_sleeping = false;
 // s_wake_time is defined in custom_text.c
+static time_t s_last_sleep_check_time = 0;
 
 // ============================================================
 // PEBBLE STORAGE WRAPPERS FOR UPTIME MODULE
@@ -193,6 +194,39 @@ void health_handler(HealthEventType event, void *context) {
   }
   if (event == HealthEventSignificantUpdate || event == HealthEventMovementUpdate) {
     update_steps();
+
+    // If we think the user is sleeping but steps are updating, the health data
+    // might be stale. Periodically re-check actual sleep state.
+    if (s_was_sleeping && s_needs_sleep_tracking) {
+      time_t now = time(NULL);
+      if ((now - s_last_sleep_check_time) >= SLEEP_RECHECK_INTERVAL) {
+        s_last_sleep_check_time = now;
+
+        HealthActivityMask activities = health_service_peek_current_activities();
+        bool is_sleeping = activities & HealthActivitySleep;
+
+        // If health data now says awake, trigger the normal wake path
+        if (!is_sleeping) {
+          // Just woke up - classify the sleep and update cache
+          uptime_on_wake_event(now, pebble_iterate_sleep);
+
+          // Get the effective wake time (accounts for naps)
+          UptimeResult result = uptime_get_cached(now, pebble_iterate_sleep);
+          if (result.found_real_sleep) {
+            s_wake_time = uptime_get_effective_wake_time(&result);
+          } else {
+            s_wake_time = now;
+          }
+
+          // Update sleep progress bar on wake
+          if (settings.progress_bar_mode == PROGRESS_MODE_SLEEP) {
+            update_progress();
+          }
+
+          s_was_sleeping = false;
+        }
+      }
+    }
   }
 }
 #endif
