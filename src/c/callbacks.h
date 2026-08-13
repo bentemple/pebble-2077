@@ -14,6 +14,15 @@ void health_handler(HealthEventType event, void *context);
 void update_health_subscription(void);
 void init_wake_time(void);
 
+// Load persisted refresh state. Call once, before the first tick.
+void init_refresh_state(void);
+
+// Weather request scheduling
+void maybe_request_weather(time_t now);
+void request_weather_on_launch(void);
+void weather_notify_success(void);
+void weather_notify_failure(void);
+
 // Sleep iterator for progress bar (wraps Pebble health API)
 #if defined(PBL_HEALTH)
 void pebble_iterate_sleep(

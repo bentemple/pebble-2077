@@ -16,6 +16,10 @@
 // ============================================================
 #define SETTINGS_KEY 1
 
+// Last successful weather fetch (see refresh.h). Distinct from
+// UPTIME_STORAGE_KEY (0x5550) defined in uptime.h.
+#define WEATHER_STORAGE_KEY 0x5754  // "WT"
+
 // ============================================================
 // PLATFORM-SPECIFIC DIMENSIONS
 // ============================================================
@@ -107,9 +111,8 @@
 #define DEFAULT_STEP_GOAL 10000
 #define DEFAULT_SLEEP_GOAL_MINS 420  // 7 hours
 
-// How often to re-check sleep state when steps arrive while supposedly sleeping.
-// Matches UPTIME_CACHE_MAX_AGE so we don't peek more often than the cache refreshes.
-#define SLEEP_RECHECK_INTERVAL (5 * 60)
+// Sleep re-check timing now lives in refresh.h (SLEEP_FORCE_RECALC_GAP)
+// alongside the rest of the scheduling policy, so it can be unit tested.
 
 // ============================================================
 // ENUMS

@@ -259,6 +259,52 @@ time_t uptime_get_effective_wake_time(const UptimeResult *result) {
 }
 
 // ============================================================
+// RESULT MERGING
+// ============================================================
+// See uptime.h for why this exists. Short version: the firmware throws
+// last night's sleep sessions away at midnight, so a fresh read that
+// finds nothing is not evidence that the user never slept.
+UptimeResult uptime_merge_result(const UptimeResult *known, const UptimeResult *fresh) {
+  // Nothing worth keeping - take whatever the fresh read produced.
+  if (!known || !known->found_real_sleep) {
+    return fresh ? *fresh : (UptimeResult){ 0 };
+  }
+
+  // The fresh read came up empty (sessions purged, or health data not
+  // yet available). Hold what we had.
+  if (!fresh || !fresh->found_real_sleep) {
+    return *known;
+  }
+
+  // A partially purged session list can leave an older block looking
+  // like "the most recent". Accepting it would jump uptime forwards by
+  // a whole day, so refuse to move backwards.
+  if (fresh->last_real_sleep_end < known->last_real_sleep_end) {
+    return *known;
+  }
+
+  // Genuinely newer sleep - the user actually went to bed again.
+  if (fresh->last_real_sleep_end > known->last_real_sleep_end) {
+    return *fresh;
+  }
+
+  // Same sleep session seen twice. Prefer the fresh view but do not let
+  // it erase detail we already had (a cache restored from flash reports
+  // a duration of 0 until it is recalculated).
+  UptimeResult merged = *fresh;
+  if (merged.last_real_sleep_secs < known->last_real_sleep_secs) {
+    merged.last_real_sleep_secs = known->last_real_sleep_secs;
+  }
+  // Naps must not shrink either. A shrinking nap total moves the
+  // effective wake time backwards, which makes uptime jump forwards -
+  // the same class of bug as the midnight purge, just in reverse.
+  if (merged.total_nap_secs < known->total_nap_secs) {
+    merged.total_nap_secs = known->total_nap_secs;
+  }
+  return merged;
+}
+
+// ============================================================
 // CACHING AND PERSISTENCE
 // ============================================================
 
@@ -278,7 +324,9 @@ static void persist_cache(void) {
   UptimePersistedData data = {
     .magic = UPTIME_MAGIC,
     .last_real_sleep_end = s_cache.result.last_real_sleep_end,
-    .calculated_at = s_cache.calculated_at
+    .calculated_at = s_cache.calculated_at,
+    .last_real_sleep_secs = (int32_t)s_cache.result.last_real_sleep_secs,
+    .total_nap_secs = (int32_t)s_cache.result.total_nap_secs
   };
 
   s_storage_write(UPTIME_STORAGE_KEY, &data, sizeof(data));
@@ -307,27 +355,31 @@ static bool restore_cache_at(time_t reference_time) {
     return false;
   }
 
-  // Check if not too old (7 days max)
-  if ((reference_time - data.last_real_sleep_end) > 7 * 24 * 3600) {
+  // Check if not too old
+  if ((reference_time - data.last_real_sleep_end) > UPTIME_KNOWN_MAX_AGE) {
+    return false;
+  }
+
+  // Defend against a corrupt or truncated record producing negative
+  // durations, which would corrupt the effective wake time.
+  if (data.last_real_sleep_secs < 0 || data.total_nap_secs < 0) {
     return false;
   }
 
   // Restore to cache
   // Set calculated_at to reference_time - we trust the stored wake time is valid
   s_cache.result.last_real_sleep_end = data.last_real_sleep_end;
-  s_cache.result.last_real_sleep_secs = 0;  // Needs recalculation
-  s_cache.result.total_nap_secs = 0;  // Naps need recalculation
+  // Duration and naps are restored too. The watchface is torn down every
+  // time the user opens another app, so recomputing these from scratch
+  // is not always possible - the sessions they came from may be gone.
+  s_cache.result.last_real_sleep_secs = (int)data.last_real_sleep_secs;
+  s_cache.result.total_nap_secs = (int)data.total_nap_secs;
   s_cache.result.found_real_sleep = true;
   s_cache.result.blocks_processed = 0;
   s_cache.calculated_at = reference_time;  // Treat as just verified
   s_cache.valid = true;
 
   return true;
-}
-
-// Wrapper that uses actual time (for production)
-static bool restore_cache(void) {
-  return restore_cache_at(time(NULL));
 }
 
 void uptime_init_at(
@@ -337,7 +389,11 @@ void uptime_init_at(
 ) {
   s_storage_read = read_fn;
   s_storage_write = write_fn;
-  s_cache.valid = false;
+
+  // Clear the whole cache, not just the valid flag. uptime_recalculate
+  // now merges against s_cache.result, so a leftover result would be
+  // treated as knowledge we never actually loaded.
+  s_cache = (UptimeCache){ .valid = false };
 
   // Try to restore from persistent storage
   restore_cache_at(now);
@@ -385,7 +441,23 @@ UptimeResult uptime_recalculate(
   time_t now,
   UptimeIterateSleepFn iterate_sleep
 ) {
-  UptimeResult result = uptime_calculate(now, iterate_sleep);
+  UptimeResult fresh = uptime_calculate(now, iterate_sleep);
+
+  // Merge against what we already know rather than overwriting it.
+  // Without this the midnight session purge resets uptime to zero while
+  // the user is still awake.
+  UptimeResult known = s_cache.result;
+  if (known.found_real_sleep) {
+    // Do not carry knowledge forward indefinitely. If the stored wake
+    // time is implausibly old the watch was probably off for a while,
+    // and a stale value is worse than none.
+    long age = (long)(now - known.last_real_sleep_end);
+    if (age < 0 || age > UPTIME_KNOWN_MAX_AGE) {
+      known.found_real_sleep = false;
+    }
+  }
+
+  UptimeResult result = uptime_merge_result(&known, &fresh);
 
   // Update cache
   s_cache.result = result;
@@ -430,7 +502,10 @@ void uptime_record_wake_at(time_t wake_time, time_t now) {
 }
 
 void uptime_invalidate_cache(void) {
-  s_cache.valid = false;
+  // Discard the result too, not just the flag - otherwise the merge in
+  // uptime_recalculate would keep resurrecting the value we just threw
+  // away. "Invalidate" means forget.
+  s_cache = (UptimeCache){ .valid = false };
 }
 
 // ============================================================

@@ -474,15 +474,23 @@ TEST(broken_night_sleep_intermediate_checks) {
 static uint8_t mock_storage[256];
 static bool mock_storage_written = false;
 
+// Tracks how many bytes were actually stored so that a short read
+// behaves the way persist_read_data does on the watch: it returns the
+// stored length, not the requested one. This is what makes the upgrade
+// path (old smaller record read into the new larger struct) testable.
+static size_t mock_storage_size = 0;
+
 static int mock_storage_read(uint32_t key, void *buffer, size_t size) {
   if (!mock_storage_written || key != UPTIME_STORAGE_KEY) return 0;
-  memcpy(buffer, mock_storage, size);
-  return (int)size;
+  size_t to_copy = size < mock_storage_size ? size : mock_storage_size;
+  memcpy(buffer, mock_storage, to_copy);
+  return (int)to_copy;
 }
 
 static int mock_storage_write(uint32_t key, const void *data, size_t size) {
   if (key != UPTIME_STORAGE_KEY || size > sizeof(mock_storage)) return 0;
   memcpy(mock_storage, data, size);
+  mock_storage_size = size;
   mock_storage_written = true;
   return (int)size;
 }
@@ -1031,6 +1039,338 @@ TEST(sleep_duration_merged) {
 }
 
 // ============================================================
+// MIDNIGHT PURGE TESTS
+// ============================================================
+// PebbleOS destroys sleep sessions at the calendar-midnight cron tick.
+// activity_sessions.c keeps a session only if it ended after 21:00 the
+// previous evening, so a night that ended at 07:00 this morning is
+// deleted at the FOLLOWING midnight - while the user is very likely
+// still awake. HealthMetricSleepSeconds is zeroed in the same pass.
+//
+// The watchface therefore cannot treat "the health API returned nothing"
+// as "the user has not slept". It has to hold onto what it already knew
+// until genuinely newer sleep shows up.
+
+TEST(merge_keeps_known_when_fresh_is_empty) {
+  UptimeResult known = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .total_nap_secs = 0, .found_real_sleep = true, .blocks_processed = 1
+  };
+  UptimeResult fresh = { .found_real_sleep = false };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_TRUE(merged.found_real_sleep);
+  ASSERT_EQ(merged.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(merged.last_real_sleep_secs, 8 * 3600);
+}
+
+TEST(merge_accepts_fresh_when_nothing_known) {
+  UptimeResult known = { .found_real_sleep = false };
+  UptimeResult fresh = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .found_real_sleep = true
+  };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_TRUE(merged.found_real_sleep);
+  ASSERT_EQ(merged.last_real_sleep_end, TODAY(7, 0));
+}
+
+TEST(merge_accepts_genuinely_newer_sleep) {
+  // The user actually slept again - this is the one case where the
+  // wake time is allowed to move.
+  UptimeResult known = {
+    .last_real_sleep_end = YESTERDAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .found_real_sleep = true
+  };
+  UptimeResult fresh = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 7 * 3600,
+    .found_real_sleep = true
+  };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_EQ(merged.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(merged.last_real_sleep_secs, 7 * 3600);
+}
+
+TEST(merge_refuses_to_move_wake_time_backwards) {
+  // A partially purged session list can surface an OLDER block as the
+  // "most recent". Accepting it would make uptime jump forwards by a
+  // whole day.
+  UptimeResult known = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .found_real_sleep = true
+  };
+  UptimeResult fresh = {
+    .last_real_sleep_end = YESTERDAY(7, 0), .last_real_sleep_secs = 6 * 3600,
+    .found_real_sleep = true
+  };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_EQ(merged.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(merged.last_real_sleep_secs, 8 * 3600);
+}
+
+TEST(merge_keeps_known_duration_when_fresh_lost_it) {
+  // Same session, but the fresh read could not recover the duration
+  // (e.g. restored from persistence). Keep the richer number.
+  UptimeResult known = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .total_nap_secs = 1800, .found_real_sleep = true
+  };
+  UptimeResult fresh = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 0,
+    .total_nap_secs = 0, .found_real_sleep = true
+  };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_EQ(merged.last_real_sleep_secs, 8 * 3600);
+  ASSERT_EQ(merged.total_nap_secs, 1800);
+}
+
+TEST(midnight_purge_does_not_reset_uptime) {
+  // THE BUG. Awake since 07:00. At midnight the firmware deletes the
+  // session. Uptime must keep counting, not reset.
+  mock_storage_written = false;
+  time_t evening = TODAY(23, 30);
+  uptime_init_at(mock_storage_read, mock_storage_write, evening);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+
+  UptimeResult before = uptime_recalculate(evening, mock_iterate_sleep);
+  ASSERT_TRUE(before.found_real_sleep);
+  ASSERT_EQ(get_uptime_mins(evening, &before), 16 * 60 + 30);
+
+  // Midnight: the firmware purges the session list.
+  MockSleepData purged = {0};
+  g_mock_data = &purged;
+  time_t after_midnight = TODAY(23, 30) + 3600;  // 00:30 next day
+
+  UptimeResult after = uptime_recalculate(after_midnight, mock_iterate_sleep);
+  ASSERT_TRUE(after.found_real_sleep);
+  ASSERT_EQ(after.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(get_uptime_mins(after_midnight, &after), 17 * 60 + 30);
+}
+
+TEST(midnight_purge_preserves_sleep_duration) {
+  // The sleep progress bar reads last_real_sleep_secs. It must not drop
+  // to zero at midnight either.
+  mock_storage_written = false;
+  time_t evening = TODAY(23, 30);
+  uptime_init_at(mock_storage_read, mock_storage_write, evening);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+
+  uptime_recalculate(evening, mock_iterate_sleep);
+
+  MockSleepData purged = {0};
+  g_mock_data = &purged;
+
+  UptimeResult after = uptime_recalculate(evening + 3600, mock_iterate_sleep);
+  ASSERT_EQ(after.last_real_sleep_secs, 8 * 3600);
+}
+
+TEST(uptime_keeps_counting_past_midnight_when_user_stays_up) {
+  // The user's explicit request: staying up past midnight is not a
+  // reason to zero the counter. Only actually sleeping is.
+  mock_storage_written = false;
+  time_t evening = TODAY(22, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, evening);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+  uptime_recalculate(evening, mock_iterate_sleep);
+
+  // Purged at midnight; user is still up at 02:00.
+  MockSleepData purged = {0};
+  g_mock_data = &purged;
+  time_t late = TODAY(22, 0) + 4 * 3600;  // 02:00
+
+  UptimeResult r = uptime_recalculate(late, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(get_uptime_mins(late, &r), 19 * 60);
+}
+
+TEST(new_sleep_after_midnight_does_reset_uptime) {
+  // ...and when the user finally does go to bed, the counter resets.
+  mock_storage_written = false;
+  time_t evening = TODAY(22, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, evening);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+  uptime_recalculate(evening, mock_iterate_sleep);
+
+  // Slept 02:00 -> 09:00 the next day; only the new session survives.
+  MockSleepData fresh = {0};
+  add_sleep(&fresh, TODAY(22, 0) + 4 * 3600, TODAY(22, 0) + 11 * 3600);
+  g_mock_data = &fresh;
+  time_t morning = TODAY(22, 0) + 12 * 3600;  // 10:00 next day
+
+  UptimeResult r = uptime_recalculate(morning, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(22, 0) + 11 * 3600);
+  ASSERT_EQ(get_uptime_mins(morning, &r), 60);
+}
+
+TEST(persistence_round_trips_sleep_duration) {
+  // Restoring from flash must bring the duration back, otherwise the
+  // progress bar reads zero after every app restart - and the watchface
+  // is restarted every time the user opens any other app.
+  mock_storage_written = false;
+  time_t now = TODAY(14, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+  uptime_recalculate(now, mock_iterate_sleep);
+
+  // Simulate an app restart with the sessions already purged.
+  uptime_invalidate_cache();
+  g_mock_data = NULL;
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+
+  UptimeResult r = uptime_get_cached(now, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);
+}
+
+TEST(purge_does_not_corrupt_persisted_data) {
+  // A zero result must never be written over good persisted state.
+  mock_storage_written = false;
+  time_t now = TODAY(14, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+  uptime_recalculate(now, mock_iterate_sleep);
+
+  MockSleepData purged = {0};
+  g_mock_data = &purged;
+  uptime_recalculate(now + 3600, mock_iterate_sleep);
+
+  // Fresh boot reading only what is on flash.
+  uptime_invalidate_cache();
+  g_mock_data = NULL;
+  uptime_init_at(mock_storage_read, mock_storage_write, now + 3600);
+
+  UptimeResult r = uptime_get_cached(now + 3600, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_end, TODAY(7, 0));
+}
+
+// ============================================================
+// UPGRADE PATH TESTS
+// ============================================================
+// UptimePersistedData grew two fields and its magic was bumped. Real
+// users are upgrading over a build that wrote the old, shorter record.
+
+// The record written by the previous release.
+typedef struct {
+  uint32_t magic;
+  time_t last_real_sleep_end;
+  time_t calculated_at;
+} LegacyPersistedData;
+
+#define LEGACY_UPTIME_MAGIC 0x55505449  // "UPTI"
+
+TEST(legacy_persisted_record_is_rejected_not_misread) {
+  // A short read must not be reinterpreted as a valid new-format record
+  // with garbage in the two new fields.
+  LegacyPersistedData legacy = {
+    .magic = LEGACY_UPTIME_MAGIC,
+    .last_real_sleep_end = TODAY(7, 0),
+    .calculated_at = TODAY(7, 5)
+  };
+  memcpy(mock_storage, &legacy, sizeof(legacy));
+  mock_storage_size = sizeof(legacy);
+  mock_storage_written = true;
+
+  time_t now = TODAY(14, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+
+  // Nothing restored - the old record is smaller than the new struct.
+  ASSERT_FALSE(uptime_cache_valid(now));
+}
+
+TEST(legacy_record_upgrades_cleanly_on_next_recalculation) {
+  // After rejecting the old record the module must still work, and the
+  // next successful calculation must write the new format.
+  LegacyPersistedData legacy = {
+    .magic = LEGACY_UPTIME_MAGIC,
+    .last_real_sleep_end = TODAY(7, 0),
+    .calculated_at = TODAY(7, 5)
+  };
+  memcpy(mock_storage, &legacy, sizeof(legacy));
+  mock_storage_size = sizeof(legacy);
+  mock_storage_written = true;
+
+  time_t now = TODAY(14, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+
+  MockSleepData data = {0};
+  add_sleep(&data, YESTERDAY(23, 0), TODAY(7, 0));
+  g_mock_data = &data;
+
+  UptimeResult r = uptime_recalculate(now, mock_iterate_sleep);
+  ASSERT_TRUE(r.found_real_sleep);
+  ASSERT_EQ(r.last_real_sleep_secs, 8 * 3600);
+
+  // The new, larger record is now on "flash" and round trips.
+  ASSERT_EQ((int)mock_storage_size, (int)sizeof(UptimePersistedData));
+  uptime_invalidate_cache();
+  g_mock_data = NULL;
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+  ASSERT_TRUE(uptime_cache_valid(now));
+
+  UptimeResult restored = uptime_get_cached(now, mock_iterate_sleep);
+  ASSERT_EQ(restored.last_real_sleep_end, TODAY(7, 0));
+  ASSERT_EQ(restored.last_real_sleep_secs, 8 * 3600);
+}
+
+TEST(corrupt_negative_durations_are_rejected) {
+  UptimePersistedData bad = {
+    .magic = UPTIME_MAGIC,
+    .last_real_sleep_end = TODAY(7, 0),
+    .calculated_at = TODAY(7, 5),
+    .last_real_sleep_secs = -1,
+    .total_nap_secs = 0
+  };
+  memcpy(mock_storage, &bad, sizeof(bad));
+  mock_storage_size = sizeof(bad);
+  mock_storage_written = true;
+
+  time_t now = TODAY(14, 0);
+  uptime_init_at(mock_storage_read, mock_storage_write, now);
+  ASSERT_FALSE(uptime_cache_valid(now));
+}
+
+TEST(merge_does_not_let_naps_shrink) {
+  // A shrinking nap total pushes the effective wake time backwards,
+  // which makes uptime jump forwards.
+  UptimeResult known = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .total_nap_secs = 3600, .found_real_sleep = true
+  };
+  UptimeResult fresh = {
+    .last_real_sleep_end = TODAY(7, 0), .last_real_sleep_secs = 8 * 3600,
+    .total_nap_secs = 600, .found_real_sleep = true
+  };
+
+  UptimeResult merged = uptime_merge_result(&known, &fresh);
+  ASSERT_EQ(merged.total_nap_secs, 3600);
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 int main(void) {
@@ -1083,6 +1423,25 @@ int main(void) {
   RUN_TEST(sleep_duration_with_nap);
   RUN_TEST(sleep_duration_wake_event_nap);
   RUN_TEST(sleep_duration_merged);
+
+  printf("\n--- MIDNIGHT PURGE TESTS ---\n");
+  RUN_TEST(merge_keeps_known_when_fresh_is_empty);
+  RUN_TEST(merge_accepts_fresh_when_nothing_known);
+  RUN_TEST(merge_accepts_genuinely_newer_sleep);
+  RUN_TEST(merge_refuses_to_move_wake_time_backwards);
+  RUN_TEST(merge_keeps_known_duration_when_fresh_lost_it);
+  RUN_TEST(midnight_purge_does_not_reset_uptime);
+  RUN_TEST(midnight_purge_preserves_sleep_duration);
+  RUN_TEST(uptime_keeps_counting_past_midnight_when_user_stays_up);
+  RUN_TEST(new_sleep_after_midnight_does_reset_uptime);
+  RUN_TEST(persistence_round_trips_sleep_duration);
+  RUN_TEST(purge_does_not_corrupt_persisted_data);
+
+  printf("\n--- UPGRADE PATH TESTS ---\n");
+  RUN_TEST(legacy_persisted_record_is_rejected_not_misread);
+  RUN_TEST(legacy_record_upgrades_cleanly_on_next_recalculation);
+  RUN_TEST(corrupt_negative_durations_are_rejected);
+  RUN_TEST(merge_does_not_let_naps_shrink);
 
   printf("\n==============================================\n");
   printf("  Results: %d/%d tests passed\n", tests_passed, tests_run);

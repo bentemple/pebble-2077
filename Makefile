@@ -24,23 +24,30 @@ install:
 TEST_DIR = test
 SRC_DIR = src/c
 TEST_BIN = $(TEST_DIR)/uptime_test.o
+REFRESH_TEST_BIN = $(TEST_DIR)/refresh_test.o
+CFLAGS_TEST = -Wall -Wextra -I$(SRC_DIR)
 
-# Compile and run tests
-test: $(TEST_BIN)
+# Compile and run all tests
+test: $(TEST_BIN) $(REFRESH_TEST_BIN)
 	./$(TEST_BIN)
+	./$(REFRESH_TEST_BIN)
 
-# Compile tests
+# Compile uptime tests
 $(TEST_BIN): $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c $(SRC_DIR)/uptime.h
-	gcc -I$(SRC_DIR) -o $@ $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c
+	gcc $(CFLAGS_TEST) -o $@ $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c
+
+# Compile refresh scheduling tests
+$(REFRESH_TEST_BIN): $(TEST_DIR)/refresh_test.c $(SRC_DIR)/refresh.c $(SRC_DIR)/refresh.h
+	gcc $(CFLAGS_TEST) -o $@ $(TEST_DIR)/refresh_test.c $(SRC_DIR)/refresh.c
 
 # Compile tests with debug output
 test-debug: $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c $(SRC_DIR)/uptime.h
-	gcc -I$(SRC_DIR) -DUPTIME_DEBUG -o $(TEST_BIN) $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c
+	gcc $(CFLAGS_TEST) -DUPTIME_DEBUG -o $(TEST_BIN) $(TEST_DIR)/uptime_test.c $(SRC_DIR)/uptime.c
 	./$(TEST_BIN)
 
 # Clean test artifacts
 test-clean:
-	rm -f $(TEST_BIN)
+	rm -f $(TEST_BIN) $(REFRESH_TEST_BIN)
 
 # Clean everything
 distclean: clean test-clean

@@ -122,6 +122,9 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
   Tuple *temperature_high_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_HIGH);
   Tuple *conditions_t = dict_find(it, MESSAGE_KEY_CONDITIONS);
   if (temperature_t && conditions_t) {
+    // Weather actually arrived - this, not a successful send, is what
+    // resets the refresh clock and clears the retry backoff.
+    weather_notify_success();
     settings.temperature = temperature_t->value->int32;
     s_cached_temp_f = settings.temperature * 9 / 5 + 32;
     if (temperature_high_t) {
@@ -290,8 +293,8 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
   save_settings();
   recalculate_update_periods();
 
-  // Initialize wake time if user enabled uptime display
-  if (s_any_needs_uptime) {
+  // Initialize wake time if the user enabled uptime or the sleep bar
+  if (s_needs_sleep_tracking) {
     init_wake_time();
   }
 
@@ -300,6 +303,23 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
   update_progress();
   update_weather_layers();
   update_health_subscription();
+}
+
+// ============================================================
+// OUTBOX CALLBACKS
+// ============================================================
+// Previously unregistered, so a dropped weather request was invisible
+// and never retried. The firmware discards a watchface's pending outbox
+// messages when the user opens another app, and NACKs inbound replies
+// addressed to a watchface that is no longer in the foreground - both
+// happen routinely, so failures must be observed and retried.
+static void outbox_failed_callback(DictionaryIterator *it, AppMessageResult reason, void *ctx) {
+  weather_notify_failure();
+}
+
+static void outbox_sent_callback(DictionaryIterator *it, void *ctx) {
+  // Reaching the phone is not the same as getting weather back. Success
+  // is recorded in inbox_received_callback when the data actually lands.
 }
 
 // ============================================================
@@ -377,9 +397,13 @@ static void main_window_unload(Window *window) {
 static void init(void) {
   load_settings();
   recalculate_update_periods();
+  init_refresh_state();
 
-  // Only initialize wake time tracking if user has $U in any text field
-  if (s_any_needs_uptime) {
+  // Initialize sleep tracking if the user shows uptime ($U) or the
+  // sleep progress bar. The progress bar needs it just as much as $U
+  // does, and gating on s_any_needs_uptime alone left sleep-mode users
+  // with no wake tracking at all.
+  if (s_needs_sleep_tracking) {
     init_wake_time();
   }
 
@@ -392,12 +416,14 @@ static void init(void) {
     .pebble_app_connection_handler = bt_callback
   });
 
-  // Register app message inbox
+  // Register app message handlers
   app_message_register_inbox_received(inbox_received_callback);
+  app_message_register_outbox_failed(outbox_failed_callback);
+  app_message_register_outbox_sent(outbox_sent_callback);
 
   // Open app message
   const int inbox_size = 256;
-  const int outbox_size = 8;
+  const int outbox_size = 32;
   app_message_open(inbox_size, outbox_size);
 
   s_main_window = window_create();
@@ -423,6 +449,11 @@ static void init(void) {
   update_health_subscription();
   battery_callback(battery_state_service_peek());
   bt_callback(connection_service_peek_pebble_app_connection());
+
+  // Top up weather if what we have is stale. The JS side also fetches on
+  // its 'ready' event, but that reply is dropped if it lands before the
+  // watchface is fully foregrounded - this is the retry-able path.
+  request_weather_on_launch();
 }
 
 static void deinit(void) {

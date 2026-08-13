@@ -107,9 +107,16 @@ typedef struct {
   uint32_t magic;              // Validation magic number
   time_t last_real_sleep_end;  // Cached wake time
   time_t calculated_at;        // When this was calculated
+  int32_t last_real_sleep_secs;  // Duration, so the progress bar survives a restart
+  int32_t total_nap_secs;        // Nap time already subtracted from uptime
 } UptimePersistedData;
 
-#define UPTIME_MAGIC 0x55505449  // "UPTI"
+// Bumped from 0x55505449 ("UPTI") when the duration fields were added,
+// so an older record is rejected rather than misread.
+#define UPTIME_MAGIC 0x5550544A  // "UPTJ"
+
+// Never carry forward knowledge older than this.
+#define UPTIME_KNOWN_MAX_AGE (7 * 24 * 3600)
 
 // Storage function types (abstraction for testing)
 typedef int (*UptimeStorageReadFn)(uint32_t key, void *buffer, size_t size);
@@ -139,6 +146,20 @@ UptimeResult uptime_calculate(
 // Returns: last_real_sleep_end + total_nap_secs
 // So uptime = now - effective_wake_time
 time_t uptime_get_effective_wake_time(const UptimeResult *result);
+
+// Combine what we already know with a freshly computed result.
+//
+// PebbleOS deletes sleep sessions at the calendar-midnight cron tick -
+// anything that ended before 21:00 the previous evening is gone, and
+// HealthMetricSleepSeconds is zeroed with it. That happens while the
+// user is usually still awake, so a plain overwrite makes uptime reset
+// at midnight and the sleep bar drop to zero.
+//
+// The merge is monotonic: the wake time only ever moves forward, and it
+// only moves when the health service reports genuinely newer sleep.
+// "The API returned nothing" means "no new information", never "the
+// user has not slept".
+UptimeResult uptime_merge_result(const UptimeResult *known, const UptimeResult *fresh);
 
 // ============================================================
 // CACHED API (preferred for production use)
