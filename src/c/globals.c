@@ -18,6 +18,7 @@ GFont s_text_font;
 GFont s_time_font_bold;
 GFont s_time_font_regular;
 GFont s_text_font_small;
+GFont s_bracket_font;
 #endif
 
 // ============================================================

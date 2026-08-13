@@ -102,11 +102,6 @@ int get_temp_small_text_width(int temp, bool metric) {
          (metric ? INFO_SMALL_CHAR_WIDTH_C : INFO_SMALL_CHAR_WIDTH_F);
 }
 
-// Width of the "T_" tomorrow marker.
-int get_tomorrow_prefix_width(void) {
-  return INFO_CHAR_WIDTH_T + INFO_KERNING + INFO_CHAR_WIDTH_UNDERSCORE;
-}
-
 GColor get_condition_color(const char *condition) {
   // Clear/Sunny
   if (strstr(condition, "CLEAR")) {
@@ -183,14 +178,15 @@ static WeatherRange current_range(bool metric) {
 //
 // So the segments are resolved once, whenever the displayed value
 // actually changes, and the proc just blits them.
-#define TEMP_MAX_SEGMENTS 6
+// current, T, [, low, separator, high, ]
+#define TEMP_MAX_SEGMENTS 7
 
 typedef struct {
   char text[8];
   GColor color;
   int16_t x;
   int16_t y;      // Offset from the top of the line
-  bool small;     // Draw in the smaller info font
+  GFont font;     // Three sizes are in play: normal, small, bracket
 } TempSegment;
 
 static TempSegment s_segments[TEMP_MAX_SEGMENTS];
@@ -209,7 +205,7 @@ static GColor temp_color_for(int temp_f) {
   }
 }
 
-static void add_segment(const char *text, GColor color, int x, int y, bool small) {
+static void add_segment(const char *text, GColor color, int x, int y, GFont font) {
   if (!text || text[0] == '\0' || s_segment_count >= TEMP_MAX_SEGMENTS) {
     return;
   }
@@ -219,7 +215,7 @@ static void add_segment(const char *text, GColor color, int x, int y, bool small
   seg->color = color;
   seg->x = (int16_t)x;
   seg->y = (int16_t)y;
-  seg->small = small;
+  seg->font = font;
   s_segment_count++;
 }
 
@@ -249,17 +245,21 @@ static void rebuild_temp_segments(const WeatherRange *r, bool metric) {
 
   // Current temperature, full size, carrying its own unit.
   weather_format_current(buf, sizeof(buf), &range, metric);
-  add_segment(buf, temp_color_for(f_range.current), x, 0, false);
+  add_segment(buf, temp_color_for(f_range.current), x, 0, s_text_font);
   x += get_temp_text_width(range.current, metric) + TEMP_RANGE_GAP;
 
   if (!range.has_high) {
     return;  // Nothing else to show.
   }
 
-  // Tomorrow marker - not a temperature, so it stays neutral.
+  // Tomorrow marker - not a temperature, so it stays neutral. The T is
+  // set in the normal font and the bracket in the larger one, so they
+  // have to be separate segments.
   if (range.is_tomorrow) {
-    add_segment(WEATHER_TOMORROW_PREFIX, color_fg, x, 0, false);
-    x += get_tomorrow_prefix_width();
+    add_segment(WEATHER_TOMORROW_MARK, color_fg, x, 0, s_text_font);
+    x += INFO_CHAR_WIDTH_T + INFO_KERNING;
+    add_segment(WEATHER_BRACKET_OPEN, color_fg, x, TEMP_BRACKET_Y, s_bracket_font);
+    x += INFO_CHAR_WIDTH_BRACKET;
   }
 
   // The range is set as a fraction: low first but dropped, high second
@@ -267,16 +267,22 @@ static void rebuild_temp_segments(const WeatherRange *r, bool metric) {
   // because that is what the numbers mean. Each carries its own unit.
   if (range.has_low) {
     weather_format_low(buf, sizeof(buf), &range, metric);
-    add_segment(buf, temp_color_for(f_range.low), x, TEMP_SMALL_LOW_Y, true);
+    add_segment(buf, temp_color_for(f_range.low), x, TEMP_SMALL_LOW_Y, s_text_font_small);
     x += get_temp_small_text_width(range.low, metric) + TEMP_FRACTION_GAP;
   }
 
   weather_format_separator(buf, sizeof(buf), &range);
-  add_segment(buf, color_fg, x, 0, false);
+  add_segment(buf, color_fg, x, 0, s_text_font);
   x += INFO_CHAR_WIDTH_SLASH + TEMP_FRACTION_GAP;
 
   weather_format_high(buf, sizeof(buf), &range, metric);
-  add_segment(buf, temp_color_for(f_range.high), x, TEMP_SMALL_HIGH_Y, true);
+  add_segment(buf, temp_color_for(f_range.high), x, TEMP_SMALL_HIGH_Y, s_text_font_small);
+  x += get_temp_small_text_width(range.high, metric);
+
+  // Close the tomorrow wrapper, matching the opening bracket's font.
+  if (range.is_tomorrow) {
+    add_segment(WEATHER_BRACKET_CLOSE, color_fg, x, TEMP_BRACKET_Y, s_bracket_font);
+  }
 }
 
 // ============================================================
@@ -289,8 +295,7 @@ static void temperature_update_proc(Layer *layer, GContext *ctx) {
   for (int i = 0; i < s_segment_count; i++) {
     const TempSegment *seg = &s_segments[i];
     graphics_context_set_text_color(ctx, seg->color);
-    graphics_draw_text(ctx, seg->text,
-                       seg->small ? s_text_font_small : s_text_font,
+    graphics_draw_text(ctx, seg->text, seg->font,
                        GRect(seg->x, seg->y, INFO_LAYER_WIDTH - seg->x, height - seg->y),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }

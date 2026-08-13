@@ -32,6 +32,7 @@ static void load_fonts(void) {
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_25));
     s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_17));
     s_text_font_small = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_13));
+    s_bracket_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_22));
   #else
     s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_58));
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_24));
@@ -57,6 +58,7 @@ static void unload_fonts(void) {
   fonts_unload_custom_font(s_text_font);
   #if defined(PBL_PLATFORM_EMERY)
   fonts_unload_custom_font(s_text_font_small);
+  fonts_unload_custom_font(s_bracket_font);
   #endif
 }
 

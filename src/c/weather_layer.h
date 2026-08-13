@@ -21,6 +21,5 @@ GColor get_condition_color(const char *condition);
 // Layout metrics (Orbitron-SemiBold 17pt, measured by tools/measure_font.py)
 int get_temp_digits_width(int temp);
 int get_temp_text_width(int temp, bool metric);
-int get_tomorrow_prefix_width(void);
 int get_temp_small_digits_width(int temp);
 int get_temp_small_text_width(int temp, bool metric);

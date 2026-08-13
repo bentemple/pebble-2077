@@ -1,7 +1,7 @@
 {
   "name": "2077",
   "author": "Jeremy Payne and Ben Temple",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/moddedBear/pebble-2077.git"
@@ -156,6 +156,15 @@
           "name": "FONT_ORBITRON_13",
           "file": "fonts/Orbitron-Regular.ttf",
           "characterRegex": "[0-9CF-]",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ORBITRON_22",
+          "file": "fonts/Orbitron-Regular.ttf",
+          "characterRegex": "[][]",
           "targetPlatforms": [
             "emery"
           ]

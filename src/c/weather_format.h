@@ -21,8 +21,8 @@
 // of which is convenient to exercise on a watch.
 //
 // Display forms:
-//   72F 58\85F     low and high for today
-//   72F T_58\85F   low and high for tomorrow (past sunset)
+//   72F 58\85F      low and high for today
+//   72F T[58\85F]   low and high for tomorrow (past sunset)
 //   72F/85F        high only, no low available (legacy phone payload)
 //   72F            no range data at all
 // ============================================================
@@ -33,8 +33,17 @@
 // Fallback when the phone has not reported a sunset hour.
 #define WEATHER_DEFAULT_SUNSET_HOUR 19
 
-// Prefixes the range when it belongs to tomorrow rather than today.
-#define WEATHER_TOMORROW_PREFIX "T_"
+// Wraps the range when it belongs to tomorrow rather than today.
+// Both halves are empty for today's range.
+//
+// The pieces are also exposed individually because the drawn layout
+// sets the brackets in a larger font than the T - they have to be
+// separate segments to carry separate fonts.
+#define WEATHER_TOMORROW_MARK  "T"
+#define WEATHER_BRACKET_OPEN   "["
+#define WEATHER_BRACKET_CLOSE  "]"
+#define WEATHER_TOMORROW_PREFIX WEATHER_TOMORROW_MARK WEATHER_BRACKET_OPEN
+#define WEATHER_TOMORROW_SUFFIX WEATHER_BRACKET_CLOSE
 
 // Separates the low from the high.
 #define WEATHER_RANGE_SEPARATOR "\\"
@@ -69,9 +78,12 @@ int weather_to_display_units(int celsius, bool metric);
 // "72F" - coloured by the current temperature.
 void weather_format_current(char *buf, size_t size, const WeatherRange *r, bool metric);
 
-// "T_" when the range is tomorrow's, otherwise empty. Not a
+// "T[" when the range is tomorrow's, otherwise empty. Not a
 // temperature, so it stays the foreground colour.
 void weather_format_tomorrow_prefix(char *buf, size_t size, const WeatherRange *r);
+
+// "]" closing the wrapper, otherwise empty.
+void weather_format_tomorrow_suffix(char *buf, size_t size, const WeatherRange *r);
 
 // "58F" - coloured by the low temperature. Empty when no low is known.
 // Carries its own unit: the stacked layout suffixes the high and the
@@ -85,5 +97,5 @@ void weather_format_separator(char *buf, size_t size, const WeatherRange *r);
 // "85F" - coloured by the high temperature. Empty when no high is known.
 void weather_format_high(char *buf, size_t size, const WeatherRange *r, bool metric);
 
-// "72F T_58\85F" - the whole line in one string.
+// "72F T[58\85F]" - the whole line in one string.
 void weather_format_combined(char *buf, size_t size, const WeatherRange *r, bool metric);

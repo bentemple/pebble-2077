@@ -163,7 +163,7 @@ TEST(combined_marks_tomorrow_with_a_leading_prefix) {
   WeatherRange r = weather_select_range(20, 10, 30, 0, 25, 20, SUNSET, true);
   char buf[24];
   weather_format_combined(buf, sizeof(buf), &r, true);
-  ASSERT_STR(buf, "20C T_0\\25C");
+  ASSERT_STR(buf, "20C T[0\\25C]");
 }
 
 TEST(combined_has_no_mark_for_today) {
@@ -243,7 +243,7 @@ TEST(split_pieces_for_tomorrow_isolate_the_mark) {
   weather_format_separator(sep, sizeof(sep), &r);
   weather_format_high(high, sizeof(high), &r, true);
   ASSERT_STR(cur, "20C");
-  ASSERT_STR(mark, "T_");
+  ASSERT_STR(mark, "T[");
   ASSERT_STR(low, "0C");
   ASSERT_STR(sep, WEATHER_RANGE_SEPARATOR);
   ASSERT_STR(high, "25C");
@@ -336,6 +336,35 @@ TEST(split_units_follow_metric_setting) {
   ASSERT_STR(low, "10C");
 }
 
+TEST(tomorrow_wrapper_has_both_halves) {
+  // T[ ... ] brackets the range; both halves are empty for today.
+  WeatherRange today = weather_select_range(20, 10, 30, 0, 25, 12, SUNSET, true);
+  WeatherRange tomorrow = weather_select_range(20, 10, 30, 0, 25, 20, SUNSET, true);
+  char open_m[4], close_m[4];
+
+  weather_format_tomorrow_prefix(open_m, sizeof(open_m), &today);
+  weather_format_tomorrow_suffix(close_m, sizeof(close_m), &today);
+  ASSERT_STR(open_m, "");
+  ASSERT_STR(close_m, "");
+
+  weather_format_tomorrow_prefix(open_m, sizeof(open_m), &tomorrow);
+  weather_format_tomorrow_suffix(close_m, sizeof(close_m), &tomorrow);
+  ASSERT_STR(open_m, "T[");
+  ASSERT_STR(close_m, "]");
+}
+
+TEST(tomorrow_wrapper_is_balanced_or_absent) {
+  // A stray opener with no closer would look like a bug on screen.
+  int hours[] = { 0, 6, 12, 18, 19, 20, 23 };
+  for (int i = 0; i < 7; i++) {
+    WeatherRange r = weather_select_range(20, 10, 30, 0, 25, hours[i], SUNSET, true);
+    char open_m[4], close_m[4];
+    weather_format_tomorrow_prefix(open_m, sizeof(open_m), &r);
+    weather_format_tomorrow_suffix(close_m, sizeof(close_m), &r);
+    ASSERT_EQ(open_m[0] != '\0', close_m[0] != '\0');
+  }
+}
+
 TEST(split_and_combined_agree_on_order_and_values) {
   // The two rendering paths must not drift apart. They differ only in
   // where the unit sits: the stacked form suffixes both temperatures,
@@ -350,12 +379,12 @@ TEST(split_and_combined_agree_on_order_and_values) {
   weather_format_combined(combined, sizeof(combined), &r, false);
 
   ASSERT_STR(cur, "68F");
-  ASSERT_STR(mark, "T_");
+  ASSERT_STR(mark, "T[");
   ASSERT_STR(high, "77F");
   ASSERT_STR(sep, WEATHER_RANGE_SEPARATOR);
   ASSERT_STR(low, "32F");
   // High before low in both.
-  ASSERT_STR(combined, "68F T_32\\77F");
+  ASSERT_STR(combined, "68F T[32\\77F]");
 }
 
 // ============================================================
@@ -405,6 +434,8 @@ int main(void) {
   RUN_TEST(split_pieces_are_empty_when_invalid);
   RUN_TEST(split_high_and_low_each_carry_a_unit);
   RUN_TEST(split_units_follow_metric_setting);
+  RUN_TEST(tomorrow_wrapper_has_both_halves);
+  RUN_TEST(tomorrow_wrapper_is_balanced_or_absent);
   RUN_TEST(split_and_combined_agree_on_order_and_values);
 
   printf("\n==============================================\n");

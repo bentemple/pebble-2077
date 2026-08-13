@@ -18,6 +18,8 @@ extern GFont s_time_font_bold;
 extern GFont s_time_font_regular;
 // Smaller cut of the info font, used for the high/low pair only.
 extern GFont s_text_font_small;
+// Larger cut, used only for the [] that wrap tomorrow's range.
+extern GFont s_bracket_font;
 #endif
 
 // ============================================================

@@ -22,7 +22,7 @@
 // selected, so the numbers on screen stay real.
 //
 // SET BACK TO 0 BEFORE RELEASE.
-#define FORCE_TOMORROW_PREFIX 1
+#define FORCE_TOMORROW_PREFIX 0
 
 // ============================================================
 // SETTINGS KEY
@@ -88,9 +88,23 @@
   #define INFO_CHAR_WIDTH_SLASH 9   // "/" and "\\" are the same advance
   #define INFO_CHAR_WIDTH_MINUS 9
   #define INFO_KERNING 1
-  // Tomorrow marker "T_" (same measurement pass: T=0x54, _=0x5F)
+  // Tomorrow marker "T[...]". The T is set in the normal info font;
+  // the brackets are drawn larger (Orbitron-Regular 22pt) so they
+  // enclose the staggered pair. A bracket's ink is only 4px wide even
+  // at that size, so the advance stays tight - taller, not fatter.
   #define INFO_CHAR_WIDTH_T 13
-  #define INFO_CHAR_WIDTH_UNDERSCORE 14
+  #define INFO_CHAR_WIDTH_BRACKET 6
+
+  // Measured ink box of "[" in Orbitron-Regular 22pt (analyze_font_strokes).
+  #define BRACKET_INK_HEIGHT 16
+  #define BRACKET_TOP_BEARING 7
+
+  // Centre the bracket in the line rather than hardcoding an offset, so
+  // changing the size above cannot silently push it off the canvas.
+  // graphics_draw_text places ink at (box_y + bearing), so back the
+  // bearing out of the desired ink top.
+  //   (20 - 16) / 2 = 2  ->  ink rows 2..17, 2px clear top and bottom
+  #define TEMP_BRACKET_Y (((TEXT_HEIGHT - BRACKET_INK_HEIGHT) / 2) - BRACKET_TOP_BEARING)
 
   // Orbitron-REGULAR 13pt for the high/low pair - ~20% smaller than the
   // current temperature so it reads as a subordinate range.
@@ -153,6 +167,13 @@
   #define DATE_X_OFFSET 5
   #define DATE_Y_OFFSET 4
   #define INFO_LAYER_WIDTH (SCREEN_WIDTH - MARGIN_SIZE * 2)
+#endif
+
+#if defined(PBL_PLATFORM_EMERY)
+// The temperature layer clips at TEXT_HEIGHT, so a bracket taller than
+// the line would be silently truncated rather than fail loudly.
+_Static_assert(BRACKET_INK_HEIGHT <= TEXT_HEIGHT,
+               "bracket font is taller than the temperature line - reduce the size");
 #endif
 
 // ============================================================

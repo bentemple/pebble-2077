@@ -83,6 +83,17 @@ void weather_format_tomorrow_prefix(char *buf, size_t size, const WeatherRange *
   snprintf(buf, size, "%s", WEATHER_TOMORROW_PREFIX);
 }
 
+void weather_format_tomorrow_suffix(char *buf, size_t size, const WeatherRange *r) {
+  if (!buf || size == 0) {
+    return;
+  }
+  if (!r || !r->valid || !r->has_high || !r->is_tomorrow) {
+    buf[0] = '\0';
+    return;
+  }
+  snprintf(buf, size, "%s", WEATHER_TOMORROW_SUFFIX);
+}
+
 void weather_format_low(char *buf, size_t size, const WeatherRange *r, bool metric) {
   if (!buf || size == 0) {
     return;
@@ -138,22 +149,24 @@ void weather_format_combined(char *buf, size_t size, const WeatherRange *r, bool
     return;
   }
 
+  const char *open_mark = r->is_tomorrow ? WEATHER_TOMORROW_PREFIX : "";
+  const char *close_mark = r->is_tomorrow ? WEATHER_TOMORROW_SUFFIX : "";
+
   if (r->has_low) {
-    // "72F 58\85F" - low first, matching the order the stacked layout
-    // draws them in.
-    snprintf(buf, size, "%d%s %s%d%s%d%s",
-             r->current, unit,
-             r->is_tomorrow ? WEATHER_TOMORROW_PREFIX : "",
-             r->low, WEATHER_RANGE_SEPARATOR, r->high, unit);
+    // "72F 58\85F" today, "72F T[58\85F]" for tomorrow. Low first,
+    // matching the order the stacked layout draws them in.
+    snprintf(buf, size, "%d%s %s%d%s%d%s%s",
+             r->current, unit, open_mark,
+             r->low, WEATHER_RANGE_SEPARATOR, r->high, unit, close_mark);
     return;
   }
 
   // Legacy current/high form. Keep it tight when it refers to today,
   // matching what previous releases displayed.
   if (r->is_tomorrow) {
-    snprintf(buf, size, "%d%s %s%s%d%s",
-             r->current, unit, WEATHER_TOMORROW_PREFIX,
-             WEATHER_RANGE_SEPARATOR, r->high, unit);
+    snprintf(buf, size, "%d%s %s%s%d%s%s",
+             r->current, unit, open_mark,
+             WEATHER_RANGE_SEPARATOR, r->high, unit, close_mark);
   } else {
     snprintf(buf, size, "%d%s%s%d%s",
              r->current, unit, WEATHER_RANGE_SEPARATOR, r->high, unit);
