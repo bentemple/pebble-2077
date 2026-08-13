@@ -253,7 +253,7 @@ const config = [
                     },
                     {
                         "value": "PBL_%m%U%j",
-                        "label": "Default: Month, week number, and day of year"
+                        "label": "Month, week number, and day of year"
                     },
                     {
                         "value": "%Y_%b",
@@ -269,7 +269,7 @@ const config = [
                     },
                     {
                         "value": "UPTIME_$U",
-                        "label": "Uptime since wake (HH:MM)"
+                        "label": "Default: Uptime since wake (HH:MM)"
                     }
                 ]
             },
@@ -278,7 +278,7 @@ const config = [
                 "id": "top-text-input",
                 "messageKey": "PREF_CUSTOM_TEXT",
                 "label": "Text",
-                "defaultValue": "PBL_%m%U%j",
+                "defaultValue": "UPTIME_$U",
                 "attributes": {
                     "limit": 16
                 }

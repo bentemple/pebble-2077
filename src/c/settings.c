@@ -45,7 +45,7 @@ void default_settings(void) {
   settings.bold_hours = true;
   settings.date_color = GColorWhite;
   settings.colon_color = GColorWhite;
-  strncpy(settings.custom_text, "PBL_%m%U%j", sizeof(settings.custom_text));
+  strncpy(settings.custom_text, "UPTIME_$U", sizeof(settings.custom_text));
   strncpy(settings.bottom_text, "%Y.%m.%d", sizeof(settings.bottom_text));
   strncpy(settings.condition, "", sizeof(settings.condition));
 }
