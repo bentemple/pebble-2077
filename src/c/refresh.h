@@ -59,6 +59,13 @@ typedef struct {
 // Backoff delay in seconds for the Nth consecutive failure (N >= 1).
 int weather_retry_delay(int consecutive_failures);
 
+// Is a request due on timing alone, ignoring connectivity?
+//
+// Split out so callers can run this cheap arithmetic check every minute
+// and only pay for the connection syscall once a request is actually
+// due - which is roughly once an hour.
+bool weather_is_due(const WeatherRefreshState *state, time_t now);
+
 // Should we send a weather request right now?
 bool weather_should_request(const WeatherRefreshState *state, time_t now, bool connected);
 
@@ -68,6 +75,9 @@ bool weather_should_request(const WeatherRefreshState *state, time_t now, bool c
 // every time the user backs out of another app.
 bool weather_should_request_on_launch(const WeatherRefreshState *state, time_t now, bool connected);
 
+// Timing-only half of the launch check, for the same reason as above.
+bool weather_is_due_on_launch(const WeatherRefreshState *state, time_t now);
+
 // Record that we just sent a request.
 void weather_on_attempt(WeatherRefreshState *state, time_t now);
 
@@ -76,6 +86,19 @@ void weather_on_success(WeatherRefreshState *state, time_t now);
 
 // Record that a send failed (outbox_failed, or outbox_begin refused).
 void weather_on_failure(WeatherRefreshState *state, time_t now);
+
+// ============================================================
+// STEP COUNT REFRESH
+// ============================================================
+
+// Step count is read from the health service no more often than this.
+// MovementUpdate events fire every few seconds while the user walks,
+// and each read costs two health syscalls to produce a number that is
+// only rendered once a minute anyway.
+#define STEPS_REFRESH_INTERVAL 60
+
+// Has enough time passed to re-read the step count?
+bool steps_should_refresh(time_t last_fetch, time_t now);
 
 // ============================================================
 // SLEEP REFRESH

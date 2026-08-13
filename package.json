@@ -33,6 +33,8 @@
       "TEMPERATURE",
       "TEMPERATURE_HIGH",
       "TEMPERATURE_HIGH_TOMORROW",
+      "TEMPERATURE_LOW_TOMORROW",
+      "TEMPERATURE_LOW",
       "SUNSET_HOUR",
       "CONDITIONS",
       "PREF_SHOW_STEPS",
@@ -145,6 +147,15 @@
           "name": "FONT_ORBITRON_17",
           "file": "fonts/Orbitron-SemiBold.ttf",
           "characterRegex": "[ -~]",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "font",
+          "name": "FONT_ORBITRON_13",
+          "file": "fonts/Orbitron-Regular.ttf",
+          "characterRegex": "[0-9CF-]",
           "targetPlatforms": [
             "emery"
           ]

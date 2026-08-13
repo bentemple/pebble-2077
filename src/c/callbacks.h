@@ -17,6 +17,9 @@ void init_wake_time(void);
 // Load persisted refresh state. Call once, before the first tick.
 void init_refresh_state(void);
 
+// Flush refresh state to storage. Call once, from deinit.
+void save_refresh_state(void);
+
 // Weather request scheduling
 void maybe_request_weather(time_t now);
 void request_weather_on_launch(void);

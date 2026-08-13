@@ -16,6 +16,8 @@ extern GFont s_text_font;
 #if defined(PBL_PLATFORM_EMERY)
 extern GFont s_time_font_bold;
 extern GFont s_time_font_regular;
+// Smaller cut of the info font, used for the high/low pair only.
+extern GFont s_text_font_small;
 #endif
 
 // ============================================================
@@ -24,8 +26,6 @@ extern GFont s_time_font_regular;
 #if defined(PBL_PLATFORM_EMERY)
 extern GColor s_effective_date_color;
 extern GColor s_effective_colon_color;
-extern GColor s_effective_temp_color;
-extern GColor s_effective_temp_high_color;
 extern GColor s_effective_condition_color;
 extern GColor s_effective_progress_color;
 #endif

@@ -12,8 +12,6 @@ ClaySettings settings;
 // ============================================================
 // CACHED DERIVED VALUES
 // ============================================================
-int s_cached_temp_f = 0;
-int s_cached_temp_high_f = 0;
 bool s_is_24h_style = true;
 const char *s_time_format = "%H:%M";
 
@@ -30,6 +28,8 @@ void default_settings(void) {
   settings.temperature = -999;  // Sentinel: no weather data yet
   settings.temperature_high = -999;
   settings.temperature_high_tomorrow = -999;
+  settings.temperature_low = -999;
+  settings.temperature_low_tomorrow = -999;
   settings.sunset_hour = 18;  // Default 6pm
   settings.progress_bar_mode = PROGRESS_MODE_SLEEP;
   settings.step_goal = DEFAULT_STEP_GOAL;
@@ -54,8 +54,6 @@ void default_settings(void) {
 // CACHE DERIVED VALUES
 // ============================================================
 void cache_derived_values(void) {
-  s_cached_temp_f = settings.temperature * 9 / 5 + 32;
-  s_cached_temp_high_f = settings.temperature_high * 9 / 5 + 32;
   s_is_24h_style = clock_is_24h_style();
   s_time_format = s_is_24h_style ? "%H:%M" : "%I:%M";
 }

@@ -31,6 +31,7 @@ static void load_fonts(void) {
     }
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_25));
     s_text_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_17));
+    s_text_font_small = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_ORBITRON_13));
   #else
     s_time_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_58));
     s_date_font = fonts_load_custom_font(resource_get_handle(RESOURCE_ID_FONT_RAJDHANI_24));
@@ -54,6 +55,9 @@ static void unload_fonts(void) {
   #endif
   fonts_unload_custom_font(s_date_font);
   fonts_unload_custom_font(s_text_font);
+  #if defined(PBL_PLATFORM_EMERY)
+  fonts_unload_custom_font(s_text_font_small);
+  #endif
 }
 
 // ============================================================
@@ -64,29 +68,11 @@ static void cache_effective_colors(void) {
   s_effective_colon_color = settings.colorize_colon ? settings.colon_color : color_fg;
   s_effective_date_color = settings.colorize_date ? settings.date_color : color_fg;
 
-  // Determine effective high temp based on sunset
-  time_t now = time(NULL);
-  struct tm *t = localtime(&now);
-  bool use_tomorrow = (t->tm_hour >= settings.sunset_hour);
-  int effective_high = use_tomorrow ? settings.temperature_high_tomorrow : settings.temperature_high;
-  int effective_high_f = effective_high * 9 / 5 + 32;
-
-  // Temperature color based on mode
-  switch (settings.temperature_color_mode) {
-    case COLOR_MODE_DISABLED:
-      s_effective_temp_color = color_fg;
-      s_effective_temp_high_color = color_fg;
-      break;
-    case COLOR_MODE_STATIC:
-      s_effective_temp_color = settings.temperature_static_color;
-      s_effective_temp_high_color = settings.temperature_static_color;
-      break;
-    case COLOR_MODE_DYNAMIC:
-    default:
-      s_effective_temp_color = get_temperature_color(s_cached_temp_f);
-      s_effective_temp_high_color = get_temperature_color(effective_high_f);
-      break;
-  }
+  // Temperature colours are resolved per segment inside the temperature
+  // layer's draw proc, which already knows whether it is showing
+  // today's or tomorrow's range. Duplicating that sunset rule here is
+  // what made the high temperature colour drift out of sync with the
+  // number it was colouring.
 
   // Weather condition color based on mode
   switch (settings.weather_color_mode) {
@@ -107,8 +93,11 @@ void update_accent_colors(void) {
   cache_effective_colors();
   text_layer_set_text_color(s_time_colon_layer, s_effective_colon_color);
   text_layer_set_text_color(s_date_layer, s_effective_date_color);
-  text_layer_set_text_color(s_temperature_layer, s_effective_temp_color);
   text_layer_set_text_color(s_condition_layer, s_effective_condition_color);
+  // The temperature line caches resolved colours in its render plan,
+  // so a colour-mode change has to rebuild it rather than just redraw.
+  invalidate_weather_render_cache();
+  update_weather_layers();
   // Mark progress layer dirty to redraw with new color
   layer_mark_dirty(s_progress_layer);
 }
@@ -126,14 +115,20 @@ static void inbox_received_callback(DictionaryIterator *it, void *ctx) {
     // resets the refresh clock and clears the retry backoff.
     weather_notify_success();
     settings.temperature = temperature_t->value->int32;
-    s_cached_temp_f = settings.temperature * 9 / 5 + 32;
     if (temperature_high_t) {
       settings.temperature_high = temperature_high_t->value->int32;
-      s_cached_temp_high_f = settings.temperature_high * 9 / 5 + 32;
     }
     Tuple *temperature_high_tomorrow_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_HIGH_TOMORROW);
     if (temperature_high_tomorrow_t) {
       settings.temperature_high_tomorrow = temperature_high_tomorrow_t->value->int32;
+    }
+    Tuple *temperature_low_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_LOW);
+    if (temperature_low_t) {
+      settings.temperature_low = temperature_low_t->value->int32;
+    }
+    Tuple *temperature_low_tomorrow_t = dict_find(it, MESSAGE_KEY_TEMPERATURE_LOW_TOMORROW);
+    if (temperature_low_tomorrow_t) {
+      settings.temperature_low_tomorrow = temperature_low_tomorrow_t->value->int32;
     }
     Tuple *sunset_hour_t = dict_find(it, MESSAGE_KEY_SUNSET_HOUR);
     if (sunset_hour_t) {
@@ -368,10 +363,8 @@ static void main_window_load(Window *window) {
   layer_add_child(window_layer, text_layer_get_layer(s_bt_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_step_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_condition_layer));
-  layer_add_child(window_layer, text_layer_get_layer(s_temperature_layer));
+  layer_add_child(window_layer, weather_temperature_layer());
   #if defined(PBL_PLATFORM_EMERY)
-  layer_add_child(window_layer, text_layer_get_layer(s_temp_slash_layer));
-  layer_add_child(window_layer, text_layer_get_layer(s_temp_high_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_hours_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_colon_layer));
   layer_add_child(window_layer, text_layer_get_layer(s_time_mins_layer));
@@ -457,6 +450,7 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  save_refresh_state();
   window_destroy(s_main_window);
 }
 

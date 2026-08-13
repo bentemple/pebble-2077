@@ -74,6 +74,11 @@ static void load_weather_refresh_state(void) {
   s_weather_refresh.consecutive_failures = (int)data.consecutive_failures;
 }
 
+// Flushed on success and on app exit rather than on every attempt.
+// Persisting each attempt meant a flash write per retry - up to ~10 in
+// the first hour of an outage, and two per failed send once the async
+// outbox_failed callback landed. Losing the last attempt time to a
+// crash or flat battery costs at most one extra request.
 static void save_weather_refresh_state(void) {
   WeatherPersistedData data = {
     .magic = WEATHER_PERSIST_MAGIC,
@@ -93,7 +98,6 @@ static void send_weather_request(time_t now) {
   AppMessageResult begin_result = app_message_outbox_begin(&it);
   if (begin_result != APP_MSG_OK || it == NULL) {
     weather_on_failure(&s_weather_refresh, now);
-    save_weather_refresh_state();
     return;
   }
 
@@ -105,22 +109,23 @@ static void send_weather_request(time_t now) {
   AppMessageResult send_result = app_message_outbox_send();
   if (send_result != APP_MSG_OK) {
     weather_on_failure(&s_weather_refresh, now);
-    save_weather_refresh_state();
     return;
   }
 
   weather_on_attempt(&s_weather_refresh, now);
-  // Persist the attempt, not just successes - this is what stops a
-  // relaunch from bypassing the minimum request gap.
-  save_weather_refresh_state();
 }
 
 void maybe_request_weather(time_t now) {
   if (!settings.show_weather) {
     return;
   }
-  bool connected = connection_service_peek_pebble_app_connection();
-  if (!weather_should_request(&s_weather_refresh, now, connected)) {
+  // Cheap arithmetic check first. This runs every minute, so the
+  // connection syscall is only worth paying for once a request is
+  // actually due - which is roughly once an hour.
+  if (!weather_is_due(&s_weather_refresh, now)) {
+    return;
+  }
+  if (!connection_service_peek_pebble_app_connection()) {
     return;
   }
   send_weather_request(now);
@@ -131,8 +136,10 @@ void request_weather_on_launch(void) {
     return;
   }
   time_t now = time(NULL);
-  bool connected = connection_service_peek_pebble_app_connection();
-  if (!weather_should_request_on_launch(&s_weather_refresh, now, connected)) {
+  if (!weather_is_due_on_launch(&s_weather_refresh, now)) {
+    return;
+  }
+  if (!connection_service_peek_pebble_app_connection()) {
     return;
   }
   send_weather_request(now);
@@ -145,6 +152,12 @@ void weather_notify_success(void) {
 
 void weather_notify_failure(void) {
   weather_on_failure(&s_weather_refresh, time(NULL));
+}
+
+// Flush refresh state before the process is torn down. The watchface is
+// killed every time the user opens another app, so this is the normal
+// path, not an edge case.
+void save_refresh_state(void) {
   save_weather_refresh_state();
 }
 
@@ -224,9 +237,13 @@ static void refresh_sleep_state(time_t now, bool force) {
   HealthActivityMask activities = health_service_peek_current_activities();
   bool is_sleeping = (activities & HealthActivitySleep) != 0;
 
-  // The step count doubles as a wake signal, so make sure it is current
-  // before the decision rather than after.
-  fetch_step_count();
+  // The step count is only consulted as a wake signal, which only
+  // matters while we believe the user is asleep. Skipping the health
+  // call the rest of the time keeps this off the per-minute path -
+  // update_steps() and MovementUpdate events keep it fresh anyway.
+  if (s_sleep_refresh.believed_sleeping) {
+    fetch_step_count();
+  }
 
   // Decide before recording the poll - the wake edge is defined against
   // the previous belief, which sleep_on_poll is about to overwrite.

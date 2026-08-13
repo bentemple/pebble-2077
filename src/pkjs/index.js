@@ -87,7 +87,7 @@ const xhrRequest = function (url, type, callback) {
 };
 
 function fetchWeatherWithCoords(lat, lon) {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,sunset&timezone=auto`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,temperature_2m_min,sunset&timezone=auto`
 
     xhrRequest(url, 'GET',
         (res) => {
@@ -113,6 +113,16 @@ function fetchWeatherWithCoords(lat, lon) {
                 ? Math.round(data.daily.temperature_2m_max[1])
                 : -999
 
+            // Lows, same shape as the highs. -999 is the "no data"
+            // sentinel the C side already uses everywhere.
+            const tempLowToday = (data.daily && data.daily.temperature_2m_min && data.daily.temperature_2m_min[0] != null)
+                ? Math.round(data.daily.temperature_2m_min[0])
+                : -999
+
+            const tempLowTomorrow = (data.daily && data.daily.temperature_2m_min && data.daily.temperature_2m_min[1] != null)
+                ? Math.round(data.daily.temperature_2m_min[1])
+                : -999
+
             // Sunset hour - use -1 sentinel if missing (C code will default to 19:00)
             const sunsetHour = (data.daily && data.daily.sunset && data.daily.sunset[0])
                 ? new Date(data.daily.sunset[0]).getHours()
@@ -122,6 +132,8 @@ function fetchWeatherWithCoords(lat, lon) {
                 'TEMPERATURE': temp,
                 'TEMPERATURE_HIGH': tempHighToday,
                 'TEMPERATURE_HIGH_TOMORROW': tempHighTomorrow,
+                'TEMPERATURE_LOW': tempLowToday,
+                'TEMPERATURE_LOW_TOMORROW': tempLowTomorrow,
                 'SUNSET_HOUR': sunsetHour,
                 'CONDITIONS': conditions
             }

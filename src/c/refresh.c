@@ -36,13 +36,8 @@ int weather_retry_delay(int consecutive_failures) {
   return delay > WEATHER_RETRY_MAX_DELAY ? WEATHER_RETRY_MAX_DELAY : delay;
 }
 
-bool weather_should_request(const WeatherRefreshState *state, time_t now, bool connected) {
+bool weather_is_due(const WeatherRefreshState *state, time_t now) {
   if (!state) {
-    return false;
-  }
-
-  // Without a phone there is nobody to answer the request.
-  if (!connected) {
     return false;
   }
 
@@ -62,14 +57,23 @@ bool weather_should_request(const WeatherRefreshState *state, time_t now, bool c
   return elapsed_at_least(now, state->last_success, WEATHER_REFRESH_INTERVAL);
 }
 
-bool weather_should_request_on_launch(const WeatherRefreshState *state, time_t now, bool connected) {
-  if (!state || !connected) {
+bool weather_should_request(const WeatherRefreshState *state, time_t now, bool connected) {
+  // Without a phone there is nobody to answer the request.
+  return connected && weather_is_due(state, now);
+}
+
+bool weather_is_due_on_launch(const WeatherRefreshState *state, time_t now) {
+  if (!state) {
     return false;
   }
   if (!elapsed_at_least(now, state->last_attempt, WEATHER_MIN_REQUEST_GAP)) {
     return false;
   }
   return elapsed_at_least(now, state->last_success, WEATHER_STALE_ON_LAUNCH);
+}
+
+bool weather_should_request_on_launch(const WeatherRefreshState *state, time_t now, bool connected) {
+  return connected && weather_is_due_on_launch(state, now);
 }
 
 void weather_on_attempt(WeatherRefreshState *state, time_t now) {
@@ -96,6 +100,13 @@ void weather_on_failure(WeatherRefreshState *state, time_t now) {
   if (state->consecutive_failures < 1000) {
     state->consecutive_failures++;
   }
+}
+
+// ============================================================
+// STEP COUNT REFRESH
+// ============================================================
+bool steps_should_refresh(time_t last_fetch, time_t now) {
+  return elapsed_at_least(now, last_fetch, STEPS_REFRESH_INTERVAL);
 }
 
 // ============================================================

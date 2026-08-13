@@ -33,14 +33,17 @@ typedef struct ClaySettings {
   char custom_text[32];
   char bottom_text[32];
   char condition[32];
+  // Appended fields only. load_settings() applies defaults before the
+  // persisted blob is read, so an older shorter record leaves anything
+  // added down here at its default instead of reading garbage.
+  int temperature_low;
+  int temperature_low_tomorrow;
 } ClaySettings;
 
 // Global settings instance (defined in settings.c)
 extern ClaySettings settings;
 
 // Cached derived values (defined in settings.c)
-extern int s_cached_temp_f;
-extern int s_cached_temp_high_f;
 extern bool s_is_24h_style;
 extern const char *s_time_format;
 

@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include "globals.h"
+#include "weather_layer.h"
 
 // ============================================================
 // GLOBAL COLORS
@@ -16,6 +17,7 @@ GFont s_text_font;
 #if defined(PBL_PLATFORM_EMERY)
 GFont s_time_font_bold;
 GFont s_time_font_regular;
+GFont s_text_font_small;
 #endif
 
 // ============================================================
@@ -24,8 +26,6 @@ GFont s_time_font_regular;
 #if defined(PBL_PLATFORM_EMERY)
 GColor s_effective_date_color = { .argb = GColorWhiteARGB8 };
 GColor s_effective_colon_color = { .argb = GColorWhiteARGB8 };
-GColor s_effective_temp_color = { .argb = GColorWhiteARGB8 };
-GColor s_effective_temp_high_color = { .argb = GColorWhiteARGB8 };
 GColor s_effective_condition_color = { .argb = GColorWhiteARGB8 };
 GColor s_effective_progress_color = { .argb = GColorWhiteARGB8 };
 #endif
@@ -67,4 +67,7 @@ void invalidate_all_caches(void) {
   s_last_temperature = -999;
   s_last_temperature_high = -999;
   s_last_steps_visible = false;
+  // The weather line caches its rendered strings rather than ints, so
+  // it needs telling separately.
+  invalidate_weather_render_cache();
 }

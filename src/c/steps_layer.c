@@ -3,6 +3,7 @@
 #include "settings.h"
 #include "globals.h"
 #include "steps_layer.h"
+#include "refresh.h"
 
 // ============================================================
 // LAYER
@@ -31,11 +32,28 @@ void unload_step_layer(void) {
 // ============================================================
 // FETCH STEP COUNT
 // ============================================================
+// Last time the health service was actually read.
+static time_t s_last_step_fetch = 0;
+
 void fetch_step_count(void) {
   #if defined(PBL_HEALTH)
+  time_t end = time(NULL);
+
+  // Rate limited to once a minute. health_handler calls this on every
+  // MovementUpdate, which fires every few seconds while the user is
+  // walking - two health syscalls each time, for a number that is only
+  // rendered once a minute.
+  //
+  // The negative-count check is the escape hatch: invalidate_all_caches()
+  // resets s_last_step_count to -1, and that has to force a real read or
+  // the step layer would render nothing until the interval expires.
+  if (s_last_step_count >= 0 && !steps_should_refresh(s_last_step_fetch, end)) {
+    return;
+  }
+  s_last_step_fetch = end;
+
   HealthMetric metric = HealthMetricStepCount;
   time_t start = time_start_of_today();
-  time_t end = time(NULL);
 
   HealthServiceAccessibilityMask mask = health_service_metric_accessible(metric, start, end);
 

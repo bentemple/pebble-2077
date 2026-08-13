@@ -12,6 +12,19 @@
 #define DEMO_MODE 0
 
 // ============================================================
+// DEBUG: FORCE TOMORROW PREFIX
+// ============================================================
+// The "T_" marker normally only appears after sunset, and only when the
+// phone has reported tomorrow's forecast - awkward to wait for when you
+// just want to look at the layout.
+//
+// This forces the marker on WITHOUT changing which day's values were
+// selected, so the numbers on screen stay real.
+//
+// SET BACK TO 0 BEFORE RELEASE.
+#define FORCE_TOMORROW_PREFIX 1
+
+// ============================================================
 // SETTINGS KEY
 // ============================================================
 #define SETTINGS_KEY 1
@@ -72,9 +85,46 @@
   // Orbitron-SemiBold 17pt character widths (measured by tools/measure_font.py)
   #define INFO_CHAR_WIDTH_F 12
   #define INFO_CHAR_WIDTH_C 14
-  #define INFO_CHAR_WIDTH_SLASH 9
+  #define INFO_CHAR_WIDTH_SLASH 9   // "/" and "\\" are the same advance
   #define INFO_CHAR_WIDTH_MINUS 9
   #define INFO_KERNING 1
+  // Tomorrow marker "T_" (same measurement pass: T=0x54, _=0x5F)
+  #define INFO_CHAR_WIDTH_T 13
+  #define INFO_CHAR_WIDTH_UNDERSCORE 14
+
+  // Orbitron-REGULAR 13pt for the high/low pair - ~20% smaller than the
+  // current temperature so it reads as a subordinate range.
+  //
+  // Regular, not SemiBold, and that matters: at 13pt SemiBold's vertical
+  // stems all round up to 2px while its horizontal bars stay at 1px, so
+  // glyphs render with heavy verticals and hairline horizontals. Regular
+  // keeps 87% of stems at 1px at the same 10px cap height. Verified with
+  // tools/analyze_font_strokes.py. Advance widths are identical between
+  // the two weights (Orbitron is geometric), so the table below is
+  // unchanged.
+  #define INFO_SMALL_CHAR_WIDTH_MINUS 7
+  // The high and low each carry their own unit at this size.
+  #define INFO_SMALL_CHAR_WIDTH_F 9
+  #define INFO_SMALL_CHAR_WIDTH_C 11
+
+  // Vertical offsets within the 20px line, measured from its top.
+  // At 13pt a digit is 10px tall with a 4px top bearing, so y=0 puts a
+  // glyph at 4..14 (flush to the top) and y=6 puts it at 10..20 (flush
+  // to the bottom) - a 6px stagger.
+  //
+  // High on top, low at the bottom - the reading that matches what the
+  // numbers mean, independent of which side of the separator they sit.
+  #define TEMP_SMALL_HIGH_Y 0
+  #define TEMP_SMALL_LOW_Y  6
+
+  // Gap between the current temperature and the range that follows it.
+  // 2px of kerning plus a 5px space advance (Orbitron-SemiBold 17pt),
+  // so the range reads as a separate group rather than a continuation.
+  #define TEMP_RANGE_GAP 7
+  // Padding either side of the separator, so it reads as a divider
+  // rather than as a character crowded against the digits. Applied
+  // twice: once after the low, once after the separator itself.
+  #define TEMP_FRACTION_GAP 2
   // Initial offsets for temperature layers (repositioned dynamically)
   #define TEMP_SLASH_OFFSET 40
   #define TEMP_HIGH_OFFSET 50
@@ -143,6 +193,22 @@ typedef enum {
 // EMERY-ONLY: DYNAMIC COLOR CONFIGURATION
 // ============================================================
 #if defined(PBL_PLATFORM_EMERY)
+
+// Orbitron-Regular 13pt digit widths (measured by tools/measure_font.py).
+// Stored one less than the advance width, like the 17pt table below -
+// get_temp_digits_width adds INFO_KERNING back per digit.
+static const int s_info_small_digit_widths[10] = {
+  10,  // 0
+  4,   // 1
+  10,  // 2
+  10,  // 3
+  8,   // 4
+  10,  // 5
+  10,  // 6
+  8,   // 7
+  10,  // 8
+  10   // 9
+};
 
 // Orbitron-SemiBold 17pt digit widths (measured by tools/measure_font.py)
 static const int s_info_digit_widths[10] = {

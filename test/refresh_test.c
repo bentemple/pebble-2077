@@ -153,6 +153,48 @@ TEST(weather_recovers_from_a_clock_jump_backwards) {
 }
 
 // ============================================================
+// WEATHER: DUE-ONLY PREDICATES
+// ============================================================
+// These exist so the caller can skip the connection syscall on the
+// ~59 of every 60 ticks where no request is due.
+TEST(weather_is_due_ignores_connectivity) {
+  WeatherRefreshState st = { .last_success = 0, .last_attempt = 0, .consecutive_failures = 0 };
+  ASSERT_TRUE(weather_is_due(&st, T0));
+}
+
+TEST(weather_is_due_matches_should_request_when_connected) {
+  // The split must not change behaviour, only the order of the checks.
+  WeatherRefreshState states[] = {
+    { .last_success = 0,  .last_attempt = 0,       .consecutive_failures = 0 },
+    { .last_success = T0, .last_attempt = T0,      .consecutive_failures = 0 },
+    { .last_success = T0, .last_attempt = T0 + 10, .consecutive_failures = 1 },
+    { .last_success = T0, .last_attempt = T0 + 10, .consecutive_failures = 3 },
+  };
+  int offsets[] = { 0, 30, 59, 60, 61, 120, 240, 3599, 3600, 7200 };
+
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 10; j++) {
+      time_t now = T0 + offsets[j];
+      ASSERT_EQ(weather_is_due(&states[i], now),
+                weather_should_request(&states[i], now, true));
+      // Never send while disconnected, whatever the timing says.
+      ASSERT_FALSE(weather_should_request(&states[i], now, false));
+    }
+  }
+}
+
+TEST(weather_is_due_on_launch_matches_should_request_on_launch) {
+  WeatherRefreshState st = { .last_success = T0, .last_attempt = T0, .consecutive_failures = 0 };
+  int offsets[] = { 0, 30, 60, 1799, 1800, 3600 };
+  for (int j = 0; j < 6; j++) {
+    time_t now = T0 + offsets[j];
+    ASSERT_EQ(weather_is_due_on_launch(&st, now),
+              weather_should_request_on_launch(&st, now, true));
+    ASSERT_FALSE(weather_should_request_on_launch(&st, now, false));
+  }
+}
+
+// ============================================================
 // WEATHER: LAUNCH
 // ============================================================
 TEST(weather_launch_fetches_when_data_is_stale) {
@@ -184,6 +226,25 @@ TEST(weather_launch_respects_the_minimum_gap) {
   WeatherRefreshState st = { .last_success = 0, .last_attempt = T0, .consecutive_failures = 0 };
   ASSERT_FALSE(weather_should_request_on_launch(&st, T0 + 30, true));
   ASSERT_TRUE(weather_should_request_on_launch(&st, T0 + WEATHER_MIN_REQUEST_GAP, true));
+}
+
+// ============================================================
+// STEP COUNT REFRESH
+// ============================================================
+TEST(steps_refresh_on_the_first_read) {
+  ASSERT_TRUE(steps_should_refresh(0, T0));
+}
+
+TEST(steps_refresh_at_most_once_a_minute) {
+  // MovementUpdate fires every few seconds while walking; each read is
+  // two health syscalls for a number rendered once a minute.
+  ASSERT_FALSE(steps_should_refresh(T0, T0 + 1));
+  ASSERT_FALSE(steps_should_refresh(T0, T0 + 59));
+  ASSERT_TRUE(steps_should_refresh(T0, T0 + 60));
+}
+
+TEST(steps_refresh_recovers_from_a_clock_jump_backwards) {
+  ASSERT_TRUE(steps_should_refresh(T0 + 10000, T0));
 }
 
 // ============================================================
@@ -380,12 +441,22 @@ int main(void) {
   RUN_TEST(weather_attempt_does_not_count_as_success);
   RUN_TEST(weather_recovers_from_a_clock_jump_backwards);
 
+  printf("\n--- WEATHER DUE-ONLY PREDICATES ---\n");
+  RUN_TEST(weather_is_due_ignores_connectivity);
+  RUN_TEST(weather_is_due_matches_should_request_when_connected);
+  RUN_TEST(weather_is_due_on_launch_matches_should_request_on_launch);
+
   printf("\n--- WEATHER LAUNCH ---\n");
   RUN_TEST(weather_launch_fetches_when_data_is_stale);
   RUN_TEST(weather_launch_skips_when_data_is_recent);
   RUN_TEST(weather_launch_fetches_when_never_fetched);
   RUN_TEST(weather_launch_respects_disconnection);
   RUN_TEST(weather_launch_respects_the_minimum_gap);
+
+  printf("\n--- STEP COUNT REFRESH ---\n");
+  RUN_TEST(steps_refresh_on_the_first_read);
+  RUN_TEST(steps_refresh_at_most_once_a_minute);
+  RUN_TEST(steps_refresh_recovers_from_a_clock_jump_backwards);
 
   printf("\n--- SLEEP POLLING ---\n");
   RUN_TEST(sleep_polls_on_the_first_tick);
